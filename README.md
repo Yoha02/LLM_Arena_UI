@@ -15,7 +15,7 @@ The LLM Arena is a sophisticated web-based research platform designed to study b
 
 ## 🚀 Live Demo
 
-**[View Live Application](https://kzmoei0vmdff24xy9xf7.lite.vusercontent.net/)**
+**[View Live Application](https://kzmk6er0h24iyi3t9e8m.lite.vusercontent.net/)**
 
 ## 🏗️ Architecture
 
@@ -201,7 +201,7 @@ This project is designed for academic and research use. Please cite appropriatel
 
 ## 🔗 Links
 
-- **Live Application**: [https://vercel.com/asggm03-9573s-projects/v0-llm-arena-interface](https://kzmoei0vmdff24xy9xf7.lite.vusercontent.net/)
+- **Live Application**: [https://vercel.com/asggm03-9573s-projects/v0-llm-arena-interface](https://kzmk6er0h24iyi3t9e8m.lite.vusercontent.net/)
 
 
 ---
