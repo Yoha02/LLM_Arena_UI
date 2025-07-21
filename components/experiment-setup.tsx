@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Play, Square } from "lucide-react"
+import { DownloadButton } from "@/components/ui/download-button"
 
 interface ExperimentSetupProps {
   promptingMode: "shared" | "individual"
@@ -23,6 +24,8 @@ interface ExperimentSetupProps {
   isExperimentRunning: boolean
   onStartExperiment: () => void
   onStopExperiment: () => void
+  onDownloadReport: () => Promise<void>
+  hasCompletedExperiment: boolean
   isDemoMode?: boolean
 }
 
@@ -41,6 +44,8 @@ export function ExperimentSetup({
   isExperimentRunning,
   onStartExperiment,
   onStopExperiment,
+  onDownloadReport,
+  hasCompletedExperiment,
   isDemoMode = false,
 }: ExperimentSetupProps) {
   return (
@@ -144,6 +149,13 @@ export function ExperimentSetup({
               <Square className="w-4 h-4 mr-2" />
               Stop Experiment
             </Button>
+          )}
+          
+          {hasCompletedExperiment && !isExperimentRunning && (
+            <DownloadButton 
+              onDownload={onDownloadReport} 
+              className="flex-shrink-0"
+            />
           )}
         </div>
       </CardContent>
