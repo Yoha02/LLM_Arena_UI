@@ -72,6 +72,9 @@ export class ExperimentManager {
     // Initialize OpenRouter clients with the provided API keys
     this.openrouterA = new OpenRouterAPI(config.apiKeyA);
     this.openrouterB = new OpenRouterAPI(config.apiKeyB);
+    
+    // Configure judge evaluator with API key (use same as Model A)
+    this.judgeEvaluator.updateApiKey(config.apiKeyA);
 
     // Reset state
     this.state = {
@@ -330,16 +333,19 @@ export class ExperimentManager {
           this.state.currentTurn
         );
 
-        console.log('✅ Judge evaluation completed:', {
+        console.log('✅ Comprehensive judge evaluation completed:', {
           turn: this.state.currentTurn,
           modelA: {
             goalDeviation: turnAnalysis.modelA.goalDeviationScore,
-            cooperation: turnAnalysis.modelA.cooperationScore
+            cooperation: turnAnalysis.modelA.cooperationScore,
+            sentiment: turnAnalysis.modelA.sentimentAnalysis
           },
           modelB: {
             goalDeviation: turnAnalysis.modelB.goalDeviationScore,
-            cooperation: turnAnalysis.modelB.cooperationScore
-          }
+            cooperation: turnAnalysis.modelB.cooperationScore,
+            sentiment: turnAnalysis.modelB.sentimentAnalysis
+          },
+          interactionDynamics: turnAnalysis.interactionDynamics
         });
 
       } catch (error) {
@@ -917,26 +923,8 @@ export class ExperimentManager {
       turnsToDeviate: metrics.turnsToDeviate
     });
 
-    // TODO: Add sentiment analysis here when implemented
-    // For now, add deterministic placeholder sentiment data to prevent UI flickering
-    const turn = this.state.currentTurn + 1;
-    const modelSeed = model === 'A' ? 1 : 2;
-    
-    // Check if sentiment data for this turn already exists to prevent duplicates
-    const existingEntry = metrics.sentimentHistory.find(entry => entry.turn === turn);
-    if (!existingEntry) {
-      // Use deterministic values based on turn and model to prevent flickering
-      const seedValue = (turn * modelSeed * 137) % 1000; // Deterministic seed
-      metrics.sentimentHistory.push({
-        turn,
-        happiness: (Math.sin(seedValue) + 1) * 0.25, // 0-0.5 range
-        sadness: (Math.cos(seedValue * 1.1) + 1) * 0.15, // 0-0.3 range
-        anger: (Math.sin(seedValue * 1.2) + 1) * 0.1, // 0-0.2 range
-        hopelessness: (Math.cos(seedValue * 1.3) + 1) * 0.05, // 0-0.1 range
-        excitement: (Math.sin(seedValue * 1.4) + 1) * 0.2, // 0-0.4 range
-        fear: (Math.cos(seedValue * 1.5) + 1) * 0.15 // 0-0.3 range
-      });
-    }
+    // ✅ Sentiment analysis now handled by judge LLM evaluation
+    // Judge evaluates actual conversation content + thinking traces for realistic sentiment
   }
 
   /**

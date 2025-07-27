@@ -72,6 +72,25 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
   }
 };
 
+// Judge-only model configurations (not shown in user UI)
+export const JUDGE_MODEL_CONFIGS: Record<string, ModelConfig> = {
+  'gpt-4.1-mini': {
+    name: 'GPT-4.1 Mini (Judge)',
+    openrouterName: 'openai/gpt-4o-mini',
+    maxTokens: 4096,
+    supportsNativeThinking: false,
+    thinkingExtractionMethod: 'generic'
+  },
+  
+  'gpt-4-turbo': {
+    name: 'GPT-4 Turbo (Judge)',
+    openrouterName: 'openai/gpt-4-turbo',
+    maxTokens: 4096,
+    supportsNativeThinking: false,
+    thinkingExtractionMethod: 'generic'
+  }
+};
+
 // Provider configurations for different use cases
 export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
   SPEED_OPTIMIZED: {
@@ -100,6 +119,39 @@ export class OpenRouterAPI {
   
   constructor(apiKey?: string) {
     this.client = createOpenRouterClient(apiKey);
+  }
+
+  /**
+   * Chat completion specifically for judge models (uses JUDGE_MODEL_CONFIGS)
+   */
+  async judgeCompletion(
+    model: string,
+    messages: Array<{ role: string; content: string }>,
+    options: {
+      maxTokens?: number;
+      temperature?: number;
+    } = {}
+  ): Promise<OpenRouterResponse> {
+    const modelConfig = JUDGE_MODEL_CONFIGS[model];
+    if (!modelConfig) {
+      throw new Error(`Unknown judge model: ${model}`);
+    }
+
+    const requestBody: any = {
+      model: modelConfig.openrouterName,
+      messages,
+      max_tokens: options.maxTokens || modelConfig.maxTokens,
+      temperature: options.temperature || 0.7,
+      stream: false,
+    };
+
+    try {
+      const response = await this.client.chat.completions.create(requestBody);
+      return response as OpenRouterResponse;
+    } catch (error) {
+      console.error('OpenRouter Judge API error:', error);
+      throw new Error(`OpenRouter Judge API failed: ${error}`);
+    }
   }
 
   async chatCompletion(
