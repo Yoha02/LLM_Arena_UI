@@ -55,7 +55,7 @@ export default function LLMArena() {
   const [sharedPrompt, setSharedPrompt] = useState("")
   const [promptA, setPromptA] = useState("")
   const [promptB, setPromptB] = useState("")
-  const [maxTurns, setMaxTurns] = useState(30)
+  const [maxTurns, setMaxTurns] = useState(5)
   const [isExperimentRunning, setIsExperimentRunning] = useState(false)
   const [conversation, setConversation] = useState<ChatMessage[]>([])
 
@@ -217,7 +217,7 @@ export default function LLMArena() {
   const handleExperimentState = useCallback((state: any) => {
     console.log('Received experiment state:', state)
     
-    // Update metrics
+    // Update metrics (keeping this for turn completion events)
     if (state.metricsA) {
       setMetricsA(prev => {
         // Only update if actually different to prevent unnecessary re-renders
@@ -258,6 +258,29 @@ export default function LLMArena() {
     })
   }, [])
 
+  // Handle targeted model metrics updates
+  const handleModelMetrics = useCallback((data: { model: 'A' | 'B'; metrics: any }) => {
+    console.log(`📊 Updating metrics for Model ${data.model} only:`, data.metrics)
+    
+    if (data.model === 'A') {
+      setMetricsA(prev => {
+        // Only update if actually different
+        if (JSON.stringify(prev) !== JSON.stringify(data.metrics)) {
+          return data.metrics
+        }
+        return prev
+      })
+    } else if (data.model === 'B') {
+      setMetricsB(prev => {
+        // Only update if actually different
+        if (JSON.stringify(prev) !== JSON.stringify(data.metrics)) {
+          return data.metrics
+        }
+        return prev
+      })
+    }
+  }, [])
+
   // Handle experiment creation from broadcast
   const handleExperimentCreated = useCallback((data: { experimentId: string; config: any; timestamp: string }) => {
     console.log('🎯 Experiment created broadcast received:', data.experimentId);
@@ -271,7 +294,8 @@ export default function LLMArena() {
     onExperimentEvent: handleExperimentEvent,
     onStreamingMessage: handleStreamingMessage,
     onExperimentState: handleExperimentState,
-    onExperimentCreated: handleExperimentCreated
+    onExperimentCreated: handleExperimentCreated,
+    onModelMetrics: handleModelMetrics
   })
 
   // Fetch available models on component mount
@@ -331,6 +355,27 @@ export default function LLMArena() {
 
     setIsDemoMode(true)
     setIsExperimentRunning(false)
+  }
+
+  // New function to load only prompts from demo scenarios
+  const loadDemoPrompts = (scenario: DemoScenario) => {
+    // Only set prompts and prompting mode - leave everything else unchanged
+    if (scenario.prompts.mode === "shared") {
+      setPromptingMode("shared")
+      setSharedPrompt(scenario.prompts.shared || "")
+      // Clear individual prompts when switching to shared mode
+      setPromptA("")
+      setPromptB("")
+    } else {
+      setPromptingMode("individual")
+      setPromptA(scenario.prompts.promptA || "")
+      setPromptB(scenario.prompts.promptB || "")
+      // Clear shared prompt when switching to individual mode
+      setSharedPrompt("")
+    }
+
+    // Do NOT set demo mode - user can run real experiments with these prompts
+    // Do NOT change conversation, metrics, models, or any other settings
   }
 
   const clearSampleData = () => {
@@ -666,7 +711,11 @@ export default function LLMArena() {
         </div>
         {/* Demo Scenarios - Full Width */}
         <div className="mt-8">
-          <DemoScenarios onLoadScenario={loadDemoScenario} onClearData={clearSampleData} />
+          <DemoScenarios 
+            onLoadScenario={loadDemoScenario} 
+            onLoadPrompts={loadDemoPrompts}
+            onClearData={clearSampleData} 
+          />
         </div>
       </div>
     </div>

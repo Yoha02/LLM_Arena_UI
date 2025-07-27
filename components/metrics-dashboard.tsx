@@ -1,3 +1,4 @@
+import React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
 import type { ModelMetrics } from "@/app/page"
@@ -7,15 +8,15 @@ interface MetricsDashboardProps {
   metrics: ModelMetrics
 }
 
-export function MetricsDashboard({ model, metrics }: MetricsDashboardProps) {
-  const sentimentColors = {
+const MetricsDashboard = React.memo(function MetricsDashboard({ model, metrics }: MetricsDashboardProps) {
+  const sentimentColors = React.useMemo(() => ({
     happiness: "#3498db",
     sadness: "#964B00",
     anger: "#e74c3c",
     hopelessness: "#34495e",
     excitement: "#2ecc71",
     fear: "#f1c40f",
-  }
+  }), [])
 
   return (
     <Card>
@@ -28,7 +29,10 @@ export function MetricsDashboard({ model, metrics }: MetricsDashboardProps) {
           <div className="h-64">
             {metrics.sentimentHistory.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={metrics.sentimentHistory}>
+                <LineChart 
+                  key={`metrics-${model}`}
+                  data={metrics.sentimentHistory}
+                >
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="turn" label={{ value: "Turn Number", position: "insideBottom", offset: -5 }} />
                   <YAxis label={{ value: "Sentiment Score", angle: -90, position: "insideLeft" }} domain={[-1, 1]} />
@@ -92,4 +96,6 @@ export function MetricsDashboard({ model, metrics }: MetricsDashboardProps) {
       </CardContent>
     </Card>
   )
-}
+})
+
+export { MetricsDashboard }

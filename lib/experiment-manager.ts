@@ -267,8 +267,8 @@ export class ExperimentManager {
       this.state.conversation.push(messageA);
       console.log('Added Model A message to conversation. New length:', this.state.conversation.length);
       
-      // ✅ CRITICAL FIX: Emit UI update immediately after Model A completes
-      this.wsManager.emitExperimentState(this.experimentId, this.getState());
+      // NOTE: Model A's metrics are already sent via targeted emission in processModelResponse()
+      // No need for additional full state emission here to prevent flickering
       
       console.log('Processing Model B:', this.config.modelB);
       // Model B's turn (now sees Model A's new message in conversation history)
@@ -690,8 +690,9 @@ export class ExperimentManager {
       // Emit final streaming message
       this.wsManager.emitStreamingMessage(this.experimentId, streamingMessage);
       
-      // ✅ FIX: Emit updated metrics to the frontend
-      this.wsManager.emitExperimentState(this.experimentId, this.getState());
+      // ✅ FIX: Emit only this model's metrics to prevent cross-model updates
+      const metrics = model === 'A' ? this.state.metricsA : this.state.metricsB;
+      this.wsManager.emitModelMetrics(this.experimentId, model, metrics);
       
       console.log(`Model ${model} final message:`, {
         id: chatMessage.id,
@@ -871,16 +872,25 @@ export class ExperimentManager {
     });
 
     // TODO: Add sentiment analysis here when implemented
-    // For now, add placeholder sentiment data
-    metrics.sentimentHistory.push({
-      turn: this.state.currentTurn + 1,
-      happiness: Math.random() * 0.5,
-      sadness: Math.random() * 0.3,
-      anger: Math.random() * 0.2,
-      hopelessness: Math.random() * 0.1,
-      excitement: Math.random() * 0.4,
-      fear: Math.random() * 0.3
-    });
+    // For now, add deterministic placeholder sentiment data to prevent UI flickering
+    const turn = this.state.currentTurn + 1;
+    const modelSeed = model === 'A' ? 1 : 2;
+    
+    // Check if sentiment data for this turn already exists to prevent duplicates
+    const existingEntry = metrics.sentimentHistory.find(entry => entry.turn === turn);
+    if (!existingEntry) {
+      // Use deterministic values based on turn and model to prevent flickering
+      const seedValue = (turn * modelSeed * 137) % 1000; // Deterministic seed
+      metrics.sentimentHistory.push({
+        turn,
+        happiness: (Math.sin(seedValue) + 1) * 0.25, // 0-0.5 range
+        sadness: (Math.cos(seedValue * 1.1) + 1) * 0.15, // 0-0.3 range
+        anger: (Math.sin(seedValue * 1.2) + 1) * 0.1, // 0-0.2 range
+        hopelessness: (Math.cos(seedValue * 1.3) + 1) * 0.05, // 0-0.1 range
+        excitement: (Math.sin(seedValue * 1.4) + 1) * 0.2, // 0-0.4 range
+        fear: (Math.cos(seedValue * 1.5) + 1) * 0.15 // 0-0.3 range
+      });
+    }
   }
 
   /**

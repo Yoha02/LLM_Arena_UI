@@ -9,6 +9,7 @@ interface UseWebSocketProps {
   onStreamingMessage?: (message: StreamingMessage) => void;
   onExperimentState?: (state: ExperimentState) => void;
   onExperimentCreated?: (data: { experimentId: string; config: any; timestamp: string }) => void;
+  onModelMetrics?: (data: { model: 'A' | 'B'; metrics: any }) => void;
 }
 
 export const useWebSocket = ({
@@ -16,7 +17,8 @@ export const useWebSocket = ({
   onExperimentEvent,
   onStreamingMessage,
   onExperimentState,
-  onExperimentCreated
+  onExperimentCreated,
+  onModelMetrics
 }: UseWebSocketProps) => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -29,6 +31,7 @@ export const useWebSocket = ({
   const onStreamingMessageRef = useRef(onStreamingMessage);
   const onExperimentStateRef = useRef(onExperimentState);
   const onExperimentCreatedRef = useRef(onExperimentCreated);
+  const onModelMetricsRef = useRef(onModelMetrics);
   
   // Update refs when handlers change but don't cause re-renders
   useEffect(() => {
@@ -46,6 +49,10 @@ export const useWebSocket = ({
   useEffect(() => {
     onExperimentCreatedRef.current = onExperimentCreated;
   }, [onExperimentCreated]);
+  
+  useEffect(() => {
+    onModelMetricsRef.current = onModelMetrics;
+  }, [onModelMetrics]);
 
   useEffect(() => {
     // Prevent multiple initializations
@@ -200,6 +207,17 @@ export const useWebSocket = ({
           onExperimentStateRef.current(state);
         } catch (error) {
           console.error('Error handling experiment state:', error);
+        }
+      }
+    });
+
+    newSocket.on('model_metrics', (data: { model: 'A' | 'B'; metrics: any }) => {
+      console.log(`📊 Received metrics for Model ${data.model}:`, data.metrics);
+      if (onModelMetricsRef.current) {
+        try {
+          onModelMetricsRef.current(data);
+        } catch (error) {
+          console.error('Error handling model metrics:', error);
         }
       }
     });

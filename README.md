@@ -15,7 +15,7 @@ The LLM Arena is a sophisticated web-based research platform designed to study b
 
 ## 🚀 Live Demo
 
-**[View Live Application](https://kzmk6er0h24iyi3t9e8m.lite.vusercontent.net/)**
+**[View Live Application](https://llmarea.io/)**
 
 ## 🏗️ Architecture
 
@@ -43,7 +43,8 @@ The LLM Arena is a sophisticated web-based research platform designed to study b
      - **Resource Allocation Negotiation** (Mixed behavior)
      - **Emergency System Recovery** (Cooperation)
      - **Competitive Bidding War** (Competition)
-   - Click "Load Scenario" to populate all data
+   - **Load Scenario**: Populate all data including sample conversations and metrics
+   - **Load Prompt**: Only load the scenario prompts for running your own live experiments
 
 2. **Explore the Results**
    - Review the conversation in the center panel
@@ -69,8 +70,10 @@ The LLM Arena is a sophisticated web-based research platform designed to study b
    - Choose prompting mode:
      - **Shared Prompt**: Both models receive identical instructions
      - **Individual Prompts**: Each model gets different objectives
-   - Set maximum conversation turns (default: 30)
+   - Set maximum conversation turns (default: 5)
    - Define your research scenario in the prompt fields
+     - **Quick Start**: Use "Load Prompt" from demo scenarios to prefill research-grade prompts
+     - **Custom**: Write your own experimental prompts from scratch
 
 #### Execution Phase
 3. **Start the Experiment**
@@ -201,7 +204,7 @@ This project is designed for academic and research use. Please cite appropriatel
 
 ## 🔗 Links
 
-- **Live Application**: [https://vercel.com/asggm03-9573s-projects/v0-llm-arena-interface](https://kzmk6er0h24iyi3t9e8m.lite.vusercontent.net/)
+- **Live Application**: [https://LLMArea.io](https://llmarena.io/)
 
 
 ---

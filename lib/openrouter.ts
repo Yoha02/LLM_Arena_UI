@@ -41,7 +41,7 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     name: 'Qwen3 235B Instruct',
     openrouterName: 'qwen/qwen3-235b-a22b',
     maxTokens: 4096,
-    supportsNativeThinking: false,
+    supportsNativeThinking: true,
     thinkingExtractionMethod: 'chain-of-thought'
   },
   

@@ -101,6 +101,21 @@ class WebSocketManager {
     this.io!.to(`experiment-${experimentId}`).emit('experiment_state', state);
   }
 
+  /**
+   * Emit metrics update for a specific model only
+   */
+  public emitModelMetrics(experimentId: string, model: 'A' | 'B', metrics: any) {
+    if (!this.ensureInitialized()) {
+      console.error('❌ Cannot emit model metrics - WebSocket not initialized');
+      return;
+    }
+    
+    this.io!.to(`experiment-${experimentId}`).emit('model_metrics', {
+      model,
+      metrics
+    });
+  }
+
   public emitToAll(eventName: string, data: any) {
     console.log('🔍 EmitToAll called:', eventName);
     if (!this.ensureInitialized()) {

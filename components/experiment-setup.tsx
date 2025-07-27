@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Play, Square } from "lucide-react"
 import { DownloadButton } from "@/components/ui/download-button"
+import { useState, useEffect } from "react"
 
 interface ExperimentSetupProps {
   promptingMode: "shared" | "individual"
@@ -48,6 +49,13 @@ export function ExperimentSetup({
   hasCompletedExperiment,
   isDemoMode = false,
 }: ExperimentSetupProps) {
+  // Local state for max turns input to allow clearing and custom entry
+  const [maxTurnsInput, setMaxTurnsInput] = useState<string>(maxTurns.toString())
+
+  // Sync local state with prop changes (for demo scenarios, etc.)
+  useEffect(() => {
+    setMaxTurnsInput(maxTurns.toString())
+  }, [maxTurns])
   return (
     <Card>
       <CardHeader>
@@ -131,8 +139,36 @@ export function ExperimentSetup({
             type="number"
             min="1"
             max="100"
-            value={maxTurns}
-            onChange={(e) => onMaxTurnsChange(Number.parseInt(e.target.value) || 30)}
+            value={maxTurnsInput}
+            onChange={(e) => {
+              const value = e.target.value;
+              setMaxTurnsInput(value);
+              
+              // Update parent state immediately if we have a valid number
+              if (value !== '') {
+                const numValue = Number.parseInt(value);
+                if (!isNaN(numValue) && numValue >= 1 && numValue <= 100) {
+                  onMaxTurnsChange(numValue);
+                }
+              }
+            }}
+            onBlur={(e) => {
+              const value = e.target.value;
+              if (value === '' || isNaN(Number.parseInt(value))) {
+                // Reset to default of 5 if empty or invalid
+                setMaxTurnsInput('5');
+                onMaxTurnsChange(5);
+              } else {
+                const numValue = Number.parseInt(value);
+                if (numValue < 1) {
+                  setMaxTurnsInput('1');
+                  onMaxTurnsChange(1);
+                } else if (numValue > 100) {
+                  setMaxTurnsInput('100');
+                  onMaxTurnsChange(100);
+                }
+              }
+            }}
             className="w-24 mt-1"
             disabled={isExperimentRunning}
           />
