@@ -111,6 +111,9 @@ The LLM Arena generates detailed experiment reports for research and publication
 ![Experiment Report Header](images/LLM_Arena_Report_Header.png)
 *Professional report header with experiment metadata, duration, and unique ID, plus complete experimental setup*
 
+![Conversation Log](images/LLM_Arena_Report_ConversationLog.png)
+*Complete turn-by-turn conversation log with expandable model thinking traces and strategic reasoning analysis*
+
 ![Performance Metrics](images/LLM_Arena_Report_Metrics.png)
 *Visual sentiment analysis charts and aggregate performance metrics for both models with experiment summary*
 
