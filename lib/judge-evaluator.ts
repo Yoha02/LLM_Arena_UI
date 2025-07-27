@@ -17,7 +17,7 @@ export interface TurnAnalysis {
 
 export class JudgeEvaluator {
   private judgeAPI: OpenRouterAPI;
-  private judgeModel: string = 'openai/gpt-4.1-mini'; // Use GPT-4.1 Mini as judge
+  private judgeModel: string = 'openai/gpt-4-turbo'; // Use GPT-4 Turbo as judge
 
   constructor() {
     this.judgeAPI = new OpenRouterAPI();
