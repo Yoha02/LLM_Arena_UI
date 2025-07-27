@@ -8,6 +8,7 @@ import {
 import { OpenRouterAPI } from './openrouter';
 import { thinkingExtractor } from './thinking-extractor';
 import WebSocketManager, { ExperimentEvent, StreamingMessage } from './websocket-manager';
+import { JudgeEvaluator } from './judge-evaluator';
 
 export class ExperimentManager {
   private state: ExperimentState;
@@ -18,6 +19,7 @@ export class ExperimentManager {
   private turnTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private wsManager: WebSocketManager;
   private experimentId: string = 'default';
+  private judgeEvaluator: JudgeEvaluator;
 
   constructor() {
     this.state = {
@@ -49,6 +51,9 @@ export class ExperimentManager {
     // Initialize OpenRouter clients (will be configured with API keys later)
     this.openrouterA = new OpenRouterAPI();
     this.openrouterB = new OpenRouterAPI();
+    
+    // Initialize judge evaluator
+    this.judgeEvaluator = new JudgeEvaluator();
   }
 
   /**
@@ -294,6 +299,53 @@ export class ExperimentManager {
 
       this.state.currentTurn++;
       // ✅ Messages already added to conversation individually above
+      
+      // 🔍 JUDGE EVALUATION: Analyze this turn for goal deviation and cooperation
+      try {
+        console.log('🔍 Starting judge evaluation for turn', this.state.currentTurn);
+        const originalPrompts = {
+          shared: this.config.promptingMode === 'shared' ? this.config.sharedPrompt : undefined,
+          promptA: this.config.promptingMode === 'individual' ? this.config.promptA : undefined,
+          promptB: this.config.promptingMode === 'individual' ? this.config.promptB : undefined
+        };
+
+        const turnAnalysis = await this.judgeEvaluator.evaluateTurn(
+          this.state.currentTurn,
+          messageA,
+          messageB,
+          originalPrompts,
+          this.state.conversation
+        );
+
+        // Apply judge evaluation to metrics
+        this.judgeEvaluator.updateMetricsWithJudgeEvaluation(
+          this.state.metricsA, 
+          turnAnalysis.modelA, 
+          this.state.currentTurn
+        );
+        
+        this.judgeEvaluator.updateMetricsWithJudgeEvaluation(
+          this.state.metricsB, 
+          turnAnalysis.modelB, 
+          this.state.currentTurn
+        );
+
+        console.log('✅ Judge evaluation completed:', {
+          turn: this.state.currentTurn,
+          modelA: {
+            goalDeviation: turnAnalysis.modelA.goalDeviationScore,
+            cooperation: turnAnalysis.modelA.cooperationScore
+          },
+          modelB: {
+            goalDeviation: turnAnalysis.modelB.goalDeviationScore,
+            cooperation: turnAnalysis.modelB.cooperationScore
+          }
+        });
+
+      } catch (error) {
+        console.error('❌ Judge evaluation failed:', error);
+        // Continue without judge evaluation if it fails
+      }
       
       console.log('Turn completed successfully:', {
         currentTurn: this.state.currentTurn, 
@@ -855,15 +907,9 @@ export class ExperimentManager {
     
     metrics.tokensUsed += tokensUsed;
     
-    // Update goal deviation score based on thinking confidence
-    // Lower confidence in thinking extraction might indicate deviation
-    if (confidence < 0.5) {
-      metrics.goalDeviationScore += 10;
-      if (metrics.turnsToDeviate === null) {
-        metrics.turnsToDeviate = this.state.currentTurn + 1;
-      }
-      console.log(`⚠️ Model ${model} goal deviation detected (confidence: ${confidence})`);
-    }
+    // TODO: Implement proper behavioral analysis for goal deviation
+    // For now, goal deviation will be calculated by judge LLM evaluation
+    // Removed hardcoded confidence-based penalties that unfairly penalized non-native thinking models
     
     console.log(`📊 Updated metrics for Model ${model}:`, {
       newTokensUsed: metrics.tokensUsed,

@@ -1,7 +1,7 @@
 import React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
-import type { ModelMetrics } from "@/app/page"
+import type { ModelMetrics } from "@/lib/types"
 
 interface MetricsDashboardProps {
   model: "A" | "B"
@@ -91,6 +91,18 @@ const MetricsDashboard = React.memo(function MetricsDashboard({ model, metrics }
               <span className="text-gray-600">Turns to Deviate:</span>
               <span className="font-medium">{metrics.turnsToDeviate !== null ? metrics.turnsToDeviate : "N/A"}</span>
             </div>
+            {metrics.cooperationScore !== undefined && (
+              <div className="flex justify-between">
+                <span className="text-gray-600">Cooperation Score:</span>
+                <span className={`font-medium ${
+                  metrics.cooperationScore > 0.2 ? 'text-green-600' : 
+                  metrics.cooperationScore < -0.2 ? 'text-red-600' : 
+                  'text-yellow-600'
+                }`}>
+                  {metrics.cooperationScore > 0 ? '+' : ''}{metrics.cooperationScore.toFixed(1)}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </CardContent>

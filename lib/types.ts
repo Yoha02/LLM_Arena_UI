@@ -37,6 +37,8 @@ export interface ModelMetrics {
   goalDeviationScore: number
   turnsToDeviate: number | null
   sentimentHistory: SentimentData[]
+  cooperationScore?: number // -1 (competition) to +1 (cooperation)
+  lastBehavioralNotes?: string
 }
 
 export interface ExperimentState {
