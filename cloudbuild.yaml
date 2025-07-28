@@ -1,4 +1,4 @@
-# The final, correct cloudbuild.yaml file.
+# The final, correct cloudbuild.yaml file for LLM Arena deployment.
 steps:
   # Step 0: Build the container image and tag it.
   - name: 'gcr.io/cloud-builders/docker'
