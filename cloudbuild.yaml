@@ -1,20 +1,16 @@
-# The final, correct cloudbuild.yaml file for LLM Arena deployment.
+# The final and most robust cloudbuild.yaml
 steps:
-  # Step 0: Build the container image and tag it.
-  - name: 'gcr.io/cloud-builders/docker'
+  # Step 0: Build the image and push it to Artifact Registry in one command.
+  # This replaces the separate 'docker build' and 'docker push' steps.
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     args:
-      - 'build'
-      - '-t'
+      - 'builds'
+      - 'submit'
+      - '--tag'
       - 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:$COMMIT_SHA'
       - '.'
 
-  # Step 1: Push the container image to Artifact Registry.
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      - 'push'
-      - 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:$COMMIT_SHA'
-
-  # Step 2: Deploy the container image to Cloud Run.
+  # Step 1: Deploy the container image (which was pushed in Step 0) to Cloud Run.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -27,7 +23,5 @@ steps:
       - 'us-central1'
       - '--update-secrets=OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest'
 
-images:
-  - 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:$COMMIT_SHA'
 options:
   logging: CLOUD_LOGGING_ONLY 
