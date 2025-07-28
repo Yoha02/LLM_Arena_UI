@@ -24,10 +24,8 @@ FROM node:18-alpine
 # Set the working directory
 WORKDIR /app
 # The secret will be injected by Cloud Run as an environment variable.
-
-# Copy only the production dependencies from the 'build' stage's node_modules
-# This prevents devDependencies from being in the final image
-COPY --from=build /app/package.json ./package.json
+# Copy package.json AND the lock file to the production stage
+COPY --from=build /app/package.json /app/package-lock.json* ./
 RUN npm ci --only=production
 
 # Copy the built application from the 'build' stage
