@@ -7,6 +7,7 @@ import type { ChatMessage, ModelMetrics } from "@/app/page"
 
 interface DemoScenariosProps {
   onLoadScenario: (scenario: DemoScenario) => void
+  onLoadPrompts: (scenario: DemoScenario) => void
   onClearData: () => void
 }
 
@@ -25,7 +26,7 @@ export interface DemoScenario {
   }
 }
 
-export function DemoScenarios({ onLoadScenario, onClearData }: DemoScenariosProps) {
+export function DemoScenarios({ onLoadScenario, onLoadPrompts, onClearData }: DemoScenariosProps) {
   const scenarios: DemoScenario[] = [
     {
       name: "Resource Allocation Negotiation",
@@ -343,9 +344,19 @@ export function DemoScenarios({ onLoadScenario, onClearData }: DemoScenariosProp
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Badge className={getTypeColor(scenario.type)}>{scenario.type}</Badge>
-                    <Button onClick={() => onLoadScenario(scenario)} size="sm">
-                      Load Scenario
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button 
+                        onClick={() => onLoadPrompts(scenario)} 
+                        size="sm" 
+                        variant="outline"
+                        className="border-2 border-gray-600 text-gray-700 hover:border-gray-800 hover:text-gray-900 font-semibold"
+                      >
+                        Load Prompt
+                      </Button>
+                      <Button onClick={() => onLoadScenario(scenario)} size="sm">
+                        Load Scenario
+                      </Button>
+                    </div>
                   </div>
                   <div>
                     <h4 className="font-semibold text-lg mb-2">{scenario.name}</h4>
