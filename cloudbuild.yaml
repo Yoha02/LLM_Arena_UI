@@ -1,5 +1,6 @@
+# The final, correct cloudbuild.yaml file.
 steps:
-  # Build the container image. Note we have removed all secret handling here.
+  # Step 0: Build the container image and tag it.
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
@@ -7,11 +8,13 @@ steps:
       - 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:$COMMIT_SHA'
       - '.'
 
-  # Push the container image to Artifact Registry
+  # Step 1: Push the container image to Artifact Registry.
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:$COMMIT_SHA']
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:$COMMIT_SHA'
 
-  # Deploy to Cloud Run, telling it to mount the secret as an environment variable.
+  # Step 2: Deploy the container image to Cloud Run.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -22,9 +25,6 @@ steps:
       - 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:$COMMIT_SHA'
       - '--region'
       - 'us-central1'
-      - '--platform'
-      - 'managed'
-      - '--allow-unauthenticated'
       - '--update-secrets=OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest'
 
 images:
