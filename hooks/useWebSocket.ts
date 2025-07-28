@@ -62,8 +62,9 @@ export const useWebSocket = ({
     
     isInitialized.current = true;
     
-    // Initialize socket connection with fallback transports
-    const newSocket = io(process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3000', {
+    // Initialize socket connection with automatic host detection
+    // No URL parameter = automatically connects to the same host that served the page
+    const newSocket = io({
       transports: ['websocket', 'polling'], // Allow polling fallback
       upgrade: true, // Allow transport upgrades
       timeout: 10000, // Longer timeout
