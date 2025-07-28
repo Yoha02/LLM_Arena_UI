@@ -1,20 +1,17 @@
 steps:
-  # Build the container image, providing the secret as a build-arg
+  # Build the container image. Note we have removed all secret handling here.
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
-      - '--build-arg' # This is the new argument
-      - 'OPENROUTER_API_KEY=${_OPENROUTER_API_KEY}' # This is the new argument
       - '-t'
       - 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:$COMMIT_SHA'
       - '.'
-    secretEnv: ['_OPENROUTER_API_KEY'] # Tell Cloud Build this env var is a secret
 
   # Push the container image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:$COMMIT_SHA']
 
-  # Deploy container image to Cloud Run
+  # Deploy to Cloud Run, telling it to mount the secret as an environment variable.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -28,13 +25,9 @@ steps:
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
+      - '--update-secrets=OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest'
+
 images:
   - 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:$COMMIT_SHA'
 options:
-  logging: CLOUD_LOGGING_ONLY
-
-# This section tells Cloud Build where to find the secret in Secret Manager
-availableSecrets:
-  secretManager:
-  - versionName: projects/1005641834883/secrets/OPENROUTER_API_KEY/versions/latest
-    env: '_OPENROUTER_API_KEY' 
+  logging: CLOUD_LOGGING_ONLY 

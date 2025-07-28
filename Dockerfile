@@ -4,12 +4,6 @@ FROM node:18-alpine AS build
 # Set the working directory
 WORKDIR /app
 
-# Accept the API key as a build argument
-ARG OPENROUTER_API_KEY
-
-# Make the API key available to the build process
-ENV OPENROUTER_API_KEY=$OPENROUTER_API_KEY
-
 # Copy package.json and the lock file for deterministic installs
 COPY package.json package-lock.json* ./
 
@@ -21,17 +15,15 @@ RUN npm ci
 COPY . .
 
 # Run the build script
+# The build will run without any API key.
 RUN npm run build
 
-# Stage 2: Production image - lightweight and contains only what's needed to run
+# Stage 2: Production image
 FROM node:18-alpine
+
+# Set the working directory
 WORKDIR /app
-
-# Accept the API key as a build argument (needed for production stage)
-ARG OPENROUTER_API_KEY
-
-# Forward the environment variable to the final running container
-ENV OPENROUTER_API_KEY=$OPENROUTER_API_KEY
+# The secret will be injected by Cloud Run as an environment variable.
 
 # Copy only the production dependencies from the 'build' stage's node_modules
 # This prevents devDependencies from being in the final image
