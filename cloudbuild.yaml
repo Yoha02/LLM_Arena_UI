@@ -1,25 +1,35 @@
-# The final, definitive, buildpack-based cloudbuild.yaml
+# Reliable Docker-based cloudbuild.yaml
 steps:
-  # Use the integrated gcloud command to build from source and deploy.
-  # This single step uses Google Cloud Buildpacks to automatically:
-  # 1. Build the container from your source code.
-  # 2. Push the container to Artifact Registry.
-  # 3. Deploy the new container to Cloud Run.
+  # Step 1: Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:latest'
+      - '.'
+
+  # Step 2: Push the container image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:latest'
+
+  # Step 3: Deploy to Cloud Run with secrets
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
       - 'run'
       - 'deploy'
       - 'llmarean-frontend'
-      - '--source'
-      - '.'
+      - '--image'
+      - 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:latest'
       - '--region'
       - 'us-central1'
-      # --- THIS FLAG PREVENTS THE AUTHENTICATION PROMPT ---
+      - '--platform'
+      - 'managed'
       - '--allow-unauthenticated'
       - '--update-secrets=OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest'
 
-# Increase the timeout to allow for the combined build+deploy process.
 timeout: '1200s'
 options:
   logging: CLOUD_LOGGING_ONLY 
