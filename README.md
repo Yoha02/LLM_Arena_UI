@@ -108,7 +108,7 @@ The LLM Arena is a sophisticated web-based research platform designed to study b
 
 The LLM Arena generates detailed experiment reports for research and publication purposes:
 
-![Experiment Report Header](images/LLM_Arena_Report_Header.png)
+![Experiment Report Header](images/LLM_Arena_Report_Header1.png)
 *Professional report header with experiment metadata, duration, and unique ID, plus complete experimental setup*
 
 ![Conversation Log](images/LLM_Arena_Report_ConversationLog.png)
