@@ -1,47 +1,40 @@
 # Stage 1: Build the Next.js application
 FROM node:18-alpine AS build
 
-# Set working directory
+# Set the working directory
 WORKDIR /app
 
-# Copy package files
+# Copy package.json and the lock file for deterministic installs
 COPY package.json package-lock.json* ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install ALL dependencies (including devDependencies needed for the build)
+# 'npm ci' is faster and safer for CI/CD than 'npm install'
+RUN npm ci
 
-# Copy source code
+# Copy the rest of the application source code
 COPY . .
 
-# Build the Next.js application
+# Run the build script
 RUN npm run build
 
-# Stage 2: Production runtime
-FROM node:18-alpine AS runtime
+# Stage 2: Production image - lightweight and contains only what's needed to run
+FROM node:18-alpine
 
-# Set working directory
 WORKDIR /app
 
-# Create non-root user for security
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# Copy only the production dependencies from the 'build' stage's node_modules
+# This prevents devDependencies from being in the final image
+COPY --from=build /app/package.json ./package.json
+RUN npm ci --only=production
 
-# Copy built application from build stage
+# Copy the built application from the 'build' stage
+# This includes the .next directory (the build output) and the public directory
+COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public
-COPY --from=build /app/.next/standalone ./
-COPY --from=build /app/.next/static ./.next/static
 
-# Change ownership to nextjs user
-RUN chown -R nextjs:nodejs /app
-USER nextjs
-
-# Expose port
+# Expose the port the app runs on. Cloud Run will automatically use this.
 EXPOSE 3000
 
-# Set environment variables
-ENV NODE_ENV=production
-ENV HOSTNAME="0.0.0.0"
-ENV PORT=3000
-
-# Start the application
-CMD ["node", "server.js"] 
+# The command to start the Next.js production server
+# Next.js will automatically listen on the PORT environment variable provided by Cloud Run
+CMD ["npm", "start"] 
