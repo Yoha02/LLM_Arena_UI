@@ -26,4 +26,8 @@ steps:
       - 'managed'
       - '--allow-unauthenticated'
 images:
-  - 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:$COMMIT_SHA' 
+  - 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:$COMMIT_SHA'
+
+# Add this section to fix the logging error
+options:
+  logging: CLOUD_LOGGING_ONLY 
