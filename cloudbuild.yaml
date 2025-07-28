@@ -1,16 +1,20 @@
-# The final, correct, and robust cloudbuild.yaml
+# The final, definitive, and direct cloudbuild.yaml
 steps:
-  # Step 0: Build the image and push it to Artifact Registry in one command.
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud # This line was missing and is the fix.
+  # Step 0: Build the container image.
+  - name: 'gcr.io/cloud-builders/docker'
     args:
-      - 'builds'
-      - 'submit'
-      - '--tag'
-      - 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:$COMMIT_SHA'
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:latest'
       - '.'
 
-  # Step 1: Deploy the container image to Cloud Run.
+  # Step 1: Push the container image to Artifact Registry.
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:latest'
+
+  # Step 2: Deploy the container image to Cloud Run.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -18,10 +22,12 @@ steps:
       - 'deploy'
       - 'llmarean-frontend'
       - '--image'
-      - 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:latest'
       - '--region'
       - 'us-central1'
       - '--update-secrets=OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest'
 
+# Increase the timeout to handle any potential network slowness during the push.
+timeout: '1200s'
 options:
   logging: CLOUD_LOGGING_ONLY 
