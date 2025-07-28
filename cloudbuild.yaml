@@ -1,8 +1,8 @@
-# The final and most robust cloudbuild.yaml
+# The final, correct, and robust cloudbuild.yaml
 steps:
   # Step 0: Build the image and push it to Artifact Registry in one command.
-  # This replaces the separate 'docker build' and 'docker push' steps.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud # This line was missing and is the fix.
     args:
       - 'builds'
       - 'submit'
@@ -10,7 +10,7 @@ steps:
       - 'us-central1-docker.pkg.dev/llmarena-466615/llmarean-frontend:$COMMIT_SHA'
       - '.'
 
-  # Step 1: Deploy the container image (which was pushed in Step 0) to Cloud Run.
+  # Step 1: Deploy the container image to Cloud Run.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
