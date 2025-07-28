@@ -36,5 +36,5 @@ options:
 # This section tells Cloud Build where to find the secret in Secret Manager
 availableSecrets:
   secretManager:
-  - versionName: projects/llmarena-466615/secrets/OPENROUTER_API_KEY/versions/latest
+  - versionName: projects/1005641834883/secrets/OPENROUTER_API_KEY/versions/latest
     env: '_OPENROUTER_API_KEY' 
