@@ -14,7 +14,10 @@ export const metadata: Metadata = {
     'Machine Learning',
     'Natural Language Processing',
     'AI Research',
-    'Model Benchmarking'
+    'Model Benchmarking',
+    'Mechanistic Interpretability',
+    'Mech Interp',
+    'Agent Benchmark'
   ],
   authors: [{ name: 'LLM Arena Team' }],
   creator: 'LLM Arena Platform',
@@ -24,7 +27,7 @@ export const metadata: Metadata = {
     address: false,
     telephone: false,
   },
-  metadataBase: new URL('https://llm-arena.vercel.app'),
+  metadataBase: new URL('https://llmarena.io'),
   openGraph: {
     title: 'LLM Arena: Inter-LLM Interaction Observer',
     description: 'Advanced platform for observing and analyzing interactions between Large Language Models with real-time streaming and professional reporting.',
