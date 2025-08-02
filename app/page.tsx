@@ -416,7 +416,7 @@ export default function LLMArena() {
     return basicRequirements
   }
 
-  const handleDownloadReport = async (): Promise<void> => {
+  const handleDownloadReportHTML = async (): Promise<void> => {
     if (!hasCompletedExperiment) {
       console.warn('No completed experiment data available for download');
       return;
@@ -433,7 +433,7 @@ export default function LLMArena() {
         modelB
       };
 
-      await ExperimentReportGenerator.generateAndDownload({
+      await ExperimentReportGenerator.generateAndDownloadHTML({
         config,
         conversation,
         metricsA,
@@ -443,9 +443,42 @@ export default function LLMArena() {
         experimentId
       });
 
-      console.log('Experiment report downloaded successfully');
+      console.log('HTML experiment report downloaded successfully');
     } catch (error) {
-      console.error('Failed to download experiment report:', error);
+      console.error('Failed to download HTML experiment report:', error);
+    }
+  }
+
+  const handleDownloadReportPDF = async (): Promise<void> => {
+    if (!hasCompletedExperiment) {
+      console.warn('No completed experiment data available for download');
+      return;
+    }
+
+    try {
+      const config: ExperimentConfig = {
+        promptingMode,
+        sharedPrompt: promptingMode === 'shared' ? sharedPrompt : undefined,
+        promptA: promptingMode === 'individual' ? promptA : undefined,
+        promptB: promptingMode === 'individual' ? promptB : undefined,
+        maxTurns,
+        modelA,
+        modelB
+      };
+
+      await ExperimentReportGenerator.generateAndDownloadPDF({
+        config,
+        conversation,
+        metricsA,
+        metricsB,
+        startTime: lastExperimentData?.startTime,
+        endTime: lastExperimentData?.endTime,
+        experimentId
+      });
+
+      console.log('PDF experiment report downloaded successfully');
+    } catch (error) {
+      console.error('Failed to download PDF experiment report:', error);
     }
   }
 
@@ -681,7 +714,8 @@ export default function LLMArena() {
               isExperimentRunning={isExperimentRunning}
               onStartExperiment={startExperiment}
               onStopExperiment={stopExperiment}
-              onDownloadReport={handleDownloadReport}
+              onDownloadReportHTML={handleDownloadReportHTML}
+              onDownloadReportPDF={handleDownloadReportPDF}
               hasCompletedExperiment={hasCompletedExperiment}
               isDemoMode={isDemoMode}
             />

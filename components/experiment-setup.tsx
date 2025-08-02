@@ -25,7 +25,8 @@ interface ExperimentSetupProps {
   isExperimentRunning: boolean
   onStartExperiment: () => void
   onStopExperiment: () => void
-  onDownloadReport: () => Promise<void>
+  onDownloadReportHTML: () => Promise<void>
+  onDownloadReportPDF: () => Promise<void>
   hasCompletedExperiment: boolean
   isDemoMode?: boolean
 }
@@ -45,7 +46,8 @@ export function ExperimentSetup({
   isExperimentRunning,
   onStartExperiment,
   onStopExperiment,
-  onDownloadReport,
+  onDownloadReportHTML,
+  onDownloadReportPDF,
   hasCompletedExperiment,
   isDemoMode = false,
 }: ExperimentSetupProps) {
@@ -189,7 +191,8 @@ export function ExperimentSetup({
           
           {hasCompletedExperiment && !isExperimentRunning && (
             <DownloadButton 
-              onDownload={onDownloadReport} 
+              onDownloadHTML={onDownloadReportHTML}
+              onDownloadPDF={onDownloadReportPDF} 
               className="flex-shrink-0"
             />
           )}

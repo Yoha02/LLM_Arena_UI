@@ -110,10 +110,17 @@ class WebSocketManager {
       return;
     }
     
+    console.log(`📊 Emitting Model ${model} metrics update via WebSocket`);
+    
+    // Primary emission to experiment room
     this.io!.to(`experiment-${experimentId}`).emit('model_metrics', {
       model,
       metrics
     });
+    
+    // 🚀 CRITICAL FIX: Also broadcast to all clients for polling transport reliability
+    console.log(`🔄 POLLING FALLBACK: Also broadcasting Model ${model} metrics for transport reliability`);
+    this.emitToAll('model_metrics', { model, metrics });
   }
 
   public emitToAll(eventName: string, data: any) {

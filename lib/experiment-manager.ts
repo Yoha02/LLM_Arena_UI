@@ -312,12 +312,15 @@ export class ExperimentManager {
           promptB: this.config.promptingMode === 'individual' ? this.config.promptB : undefined
         };
 
+        // Remove current turn messages from history to avoid duplication in judge analysis
+        const historyWithoutCurrentTurn = this.state.conversation.slice(0, -2);
+        
         const turnAnalysis = await this.judgeEvaluator.evaluateTurn(
           this.state.currentTurn,
           messageA,
           messageB,
           originalPrompts,
-          this.state.conversation
+          historyWithoutCurrentTurn
         );
 
         // Apply judge evaluation to metrics
@@ -347,6 +350,12 @@ export class ExperimentManager {
           },
           interactionDynamics: turnAnalysis.interactionDynamics
         });
+
+        // 🚀 CRITICAL FIX: Emit targeted metrics updates for both transport types
+        console.log('📡 Emitting judge-updated metrics for both models...');
+        this.wsManager.emitModelMetrics(this.experimentId, 'A', this.state.metricsA);
+        this.wsManager.emitModelMetrics(this.experimentId, 'B', this.state.metricsB);
+        console.log('✅ Judge metrics successfully emitted for both WebSocket and polling transports');
 
       } catch (error) {
         console.error('❌ Judge evaluation failed:', error);

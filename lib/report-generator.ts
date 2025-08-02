@@ -1,4 +1,5 @@
 import type { ChatMessage, ModelMetrics, ExperimentConfig, SentimentData } from './types';
+import { PDFReportGenerator } from './pdf-generator';
 
 interface ExperimentReportData {
   config: ExperimentConfig;
@@ -16,9 +17,23 @@ export class ExperimentReportGenerator {
    * Generate and download a complete experiment report as HTML
    */
   static async generateAndDownload(data: ExperimentReportData): Promise<void> {
+    return this.generateAndDownloadHTML(data);
+  }
+
+  /**
+   * Generate and download a complete experiment report in HTML format
+   */
+  static async generateAndDownloadHTML(data: ExperimentReportData): Promise<void> {
     const htmlContent = this.generateHTMLReport(data);
-    const filename = this.generateFilename(data.startTime);
+    const filename = this.generateFilename(data.startTime, 'html');
     this.downloadHTML(htmlContent, filename);
+  }
+
+  /**
+   * Generate and download a professional PDF report
+   */
+  static async generateAndDownloadPDF(data: ExperimentReportData): Promise<void> {
+    return PDFReportGenerator.generateAndDownloadPDF(data);
   }
 
   /**
@@ -71,6 +86,8 @@ export class ExperimentReportGenerator {
 </body>
 </html>`;
   }
+
+
 
   /**
    * Generate experiment setup section
@@ -306,11 +323,11 @@ export class ExperimentReportGenerator {
     return `${minutes}m ${seconds}s`;
   }
 
-  private static generateFilename(startTime?: Date): string {
+  private static generateFilename(startTime?: Date, format: 'html' | 'pdf' = 'html'): string {
     const timestamp = startTime 
       ? startTime.toISOString().slice(0, 19).replace(/[:.]/g, '-')
       : new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
-    return `llm-arena-experiment-${timestamp}.html`;
+    return `llm-arena-experiment-${timestamp}.${format}`;
   }
 
   /**
