@@ -52,11 +52,18 @@ export function ExperimentSetup({
   isDemoMode = false,
 }: ExperimentSetupProps) {
   // Local state for max turns input to allow clearing and custom entry
-  const [maxTurnsInput, setMaxTurnsInput] = useState<string>(maxTurns.toString())
+  const [maxTurnsInput, setMaxTurnsInput] = useState<string>(maxTurns === -1 ? '5' : maxTurns.toString())
+  const [isUnlimited, setIsUnlimited] = useState<boolean>(maxTurns === -1)
 
   // Sync local state with prop changes (for demo scenarios, etc.)
   useEffect(() => {
-    setMaxTurnsInput(maxTurns.toString())
+    if (maxTurns === -1) {
+      setIsUnlimited(true)
+      setMaxTurnsInput('5') // Default value when unlimited is unchecked
+    } else {
+      setIsUnlimited(false)
+      setMaxTurnsInput(maxTurns.toString())
+    }
   }, [maxTurns])
   return (
     <Card>
@@ -136,44 +143,78 @@ export function ExperimentSetup({
 
         <div>
           <Label htmlFor="max-turns">Max Turns</Label>
-          <Input
-            id="max-turns"
-            type="number"
-            min="1"
-            max="100"
-            value={maxTurnsInput}
-            onChange={(e) => {
-              const value = e.target.value;
-              setMaxTurnsInput(value);
-              
-              // Update parent state immediately if we have a valid number
-              if (value !== '') {
-                const numValue = Number.parseInt(value);
-                if (!isNaN(numValue) && numValue >= 1 && numValue <= 100) {
-                  onMaxTurnsChange(numValue);
+          <div className="flex items-center gap-3 mt-1">
+            <Input
+              id="max-turns"
+              type="number"
+              min="1"
+              max="100"
+              value={maxTurnsInput}
+              onChange={(e) => {
+                const value = e.target.value;
+                setMaxTurnsInput(value);
+                
+                // Update parent state immediately if we have a valid number and not unlimited
+                if (value !== '' && !isUnlimited) {
+                  const numValue = Number.parseInt(value);
+                  if (!isNaN(numValue) && numValue >= 1 && numValue <= 100) {
+                    onMaxTurnsChange(numValue);
+                  }
                 }
-              }
-            }}
-            onBlur={(e) => {
-              const value = e.target.value;
-              if (value === '' || isNaN(Number.parseInt(value))) {
-                // Reset to default of 5 if empty or invalid
-                setMaxTurnsInput('5');
-                onMaxTurnsChange(5);
-              } else {
-                const numValue = Number.parseInt(value);
-                if (numValue < 1) {
-                  setMaxTurnsInput('1');
-                  onMaxTurnsChange(1);
-                } else if (numValue > 100) {
-                  setMaxTurnsInput('100');
-                  onMaxTurnsChange(100);
+              }}
+              onBlur={(e) => {
+                if (isUnlimited) return; // Don't process if unlimited is checked
+                
+                const value = e.target.value;
+                if (value === '' || isNaN(Number.parseInt(value))) {
+                  // Reset to default of 5 if empty or invalid
+                  setMaxTurnsInput('5');
+                  onMaxTurnsChange(5);
+                } else {
+                  const numValue = Number.parseInt(value);
+                  if (numValue < 1) {
+                    setMaxTurnsInput('1');
+                    onMaxTurnsChange(1);
+                  } else if (numValue > 100) {
+                    setMaxTurnsInput('100');
+                    onMaxTurnsChange(100);
+                  }
                 }
-              }
-            }}
-            className="w-24 mt-1"
-            disabled={isExperimentRunning}
-          />
+              }}
+              className="w-24"
+              disabled={isExperimentRunning || isUnlimited}
+            />
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="unlimited-turns"
+                checked={isUnlimited}
+                onChange={(e) => {
+                  const unlimited = e.target.checked;
+                  setIsUnlimited(unlimited);
+                  
+                  if (unlimited) {
+                    // Set to unlimited (-1)
+                    onMaxTurnsChange(-1);
+                  } else {
+                    // Set to the current input value or default to 5
+                    const numValue = Number.parseInt(maxTurnsInput);
+                    if (!isNaN(numValue) && numValue >= 1 && numValue <= 100) {
+                      onMaxTurnsChange(numValue);
+                    } else {
+                      setMaxTurnsInput('5');
+                      onMaxTurnsChange(5);
+                    }
+                  }
+                }}
+                disabled={isExperimentRunning}
+                className="h-4 w-4"
+              />
+              <Label htmlFor="unlimited-turns" className="text-sm text-gray-600">
+                No Limit
+              </Label>
+            </div>
+          </div>
         </div>
 
         <div className="flex gap-2">
@@ -183,7 +224,12 @@ export function ExperimentSetup({
               Start Experiment
             </Button>
           ) : (
-            <Button onClick={onStopExperiment} variant="destructive" className="flex-1" size="lg">
+            <Button 
+              onClick={onStopExperiment}
+              variant="destructive" 
+              className="flex-1" 
+              size="lg"
+            >
               <Square className="w-4 h-4 mr-2" />
               Stop Experiment
             </Button>

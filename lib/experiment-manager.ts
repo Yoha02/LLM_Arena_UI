@@ -10,6 +10,11 @@ import { thinkingExtractor } from './thinking-extractor';
 import WebSocketManager, { ExperimentEvent, StreamingMessage } from './websocket-manager';
 import { JudgeEvaluator } from './judge-evaluator';
 
+// Global singleton registry that persists across module contexts
+declare global {
+  var __experimentManagerInstance: ExperimentManager | undefined;
+}
+
 export class ExperimentManager {
   private state: ExperimentState;
   private openrouterA: OpenRouterAPI;
@@ -17,11 +22,18 @@ export class ExperimentManager {
   private config: ExperimentConfig | null = null;
   private isProcessingTurn: boolean = false;
   private turnTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private ttlTimeoutId: ReturnType<typeof setTimeout> | null = null; // TTL safety timeout
   private wsManager: WebSocketManager;
   private experimentId: string = 'default';
   private judgeEvaluator: JudgeEvaluator;
+  private manualStopRequested: boolean = false; // NEW: Flag for manual stops
+  private instanceId: string; // NEW: Track instance identity
 
   constructor() {
+    // Generate unique instance ID for debugging
+    this.instanceId = `EM_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    console.log(`🏗️ ExperimentManager constructor called - Instance: ${this.instanceId}`);
+    
     this.state = {
       isRunning: false,
       currentTurn: 0,
@@ -43,6 +55,7 @@ export class ExperimentManager {
     // Initialize flags
     this.isProcessingTurn = false;
     this.turnTimeoutId = null;
+    this.ttlTimeoutId = null;
     
     // Initialize WebSocket manager (will auto-initialize when needed)
     this.wsManager = WebSocketManager.getInstance();
@@ -57,9 +70,52 @@ export class ExperimentManager {
   }
 
   /**
+   * Helper method to safely clear TTL timeout when experiment stops
+   */
+  private clearTTLTimeout(): void {
+    if (this.ttlTimeoutId) {
+      clearTimeout(this.ttlTimeoutId);
+      this.ttlTimeoutId = null;
+      console.log('🕐 Cleared TTL safety timeout');
+    }
+  }
+
+  /**
+   * Helper method to stop experiment with proper cleanup
+   */
+  private cleanStopExperiment(reason: string): void {
+    this.state.isRunning = false;
+    this.state.endTime = new Date();
+    this.isProcessingTurn = false;
+    this.clearTTLTimeout(); // Always clear TTL timeout when stopping
+    
+    // Clear any pending turn timeout
+    if (this.turnTimeoutId) {
+      clearTimeout(this.turnTimeoutId);
+      this.turnTimeoutId = null;
+    }
+    
+    console.log(`🛑 Experiment stopped cleanly: ${reason}`);
+  }
+
+  /**
+   * Get singleton instance using global registry
+   */
+  static getInstance(): ExperimentManager {
+    if (!global.__experimentManagerInstance) {
+      console.log('🔥 Creating NEW ExperimentManager singleton instance (global registry)');
+      global.__experimentManagerInstance = new ExperimentManager();
+    } else {
+      console.log(`🔄 Returning EXISTING ExperimentManager instance: ${global.__experimentManagerInstance.instanceId}`);
+    }
+    return global.__experimentManagerInstance;
+  }
+
+  /**
    * Start a new experiment with the given configuration
    */
   async startExperiment(config: ExperimentConfig): Promise<void> {
+    console.log(`🚀 Starting experiment on instance: ${this.instanceId}`);
     if (this.state.isRunning) {
       throw new Error('Experiment is already running');
     }
@@ -99,6 +155,44 @@ export class ExperimentManager {
     // Reset processing flags
     this.isProcessingTurn = false;
     this.turnTimeoutId = null;
+    this.ttlTimeoutId = null;
+    this.manualStopRequested = false; // NEW: Reset stop flag when starting
+
+    // 🕐 TTL SAFETY: Auto-stop experiment after 1 hour (3600000ms) as ultimate failsafe
+    this.ttlTimeoutId = setTimeout(() => {
+      console.log('🚨 TTL TIMEOUT: Experiment has been running for 1 hour - AUTO-STOPPING as safety measure');
+      console.log(`🕐 TTL auto-stop triggered for experiment: ${this.experimentId} on instance: ${this.instanceId}`);
+      
+      if (this.state.isRunning) {
+        this.state.isRunning = false;
+        this.state.endTime = new Date();
+        this.isProcessingTurn = false;
+        
+        // Clear any pending turn timeout
+        if (this.turnTimeoutId) {
+          clearTimeout(this.turnTimeoutId);
+          this.turnTimeoutId = null;
+        }
+        
+        // Emit stopped event
+        this.wsManager.emitExperimentEvent(this.experimentId, {
+          type: 'experiment_stopped',
+          data: {
+            finalTurn: this.state.currentTurn,
+            totalMessages: this.state.conversation.length,
+            endTime: this.state.endTime,
+            reason: 'ttl_timeout'
+          },
+          timestamp: new Date()
+        });
+        
+        console.log('✅ TTL auto-stop completed - experiment terminated after 1 hour');
+      }
+      
+      this.ttlTimeoutId = null;
+    }, 3600000); // 1 hour = 3600000 milliseconds
+
+    console.log(`🕐 TTL safety timeout set: experiment will auto-stop after 1 hour if still running`);
 
     console.log('Experiment started with config:', config);
     
@@ -157,46 +251,40 @@ export class ExperimentManager {
     }
   }
 
-  /**
+    /**
    * Stop the running experiment
    */
-  async stopExperiment(): Promise<void> {
-    if (!this.state.isRunning) {
-      throw new Error('No experiment is currently running');
-    }
-
-    this.state.isRunning = false;
-    this.state.endTime = new Date();
+async stopExperiment(): Promise<void> {
+    console.log(`🛑 Manual stop requested - Instance: ${this.instanceId}`);
+    console.log('🛑 Current state:', {
+      instanceId: this.instanceId,
+      currentTurn: this.state.currentTurn,
+      isRunning: this.state.isRunning,
+      isProcessingTurn: this.isProcessingTurn,
+      experimentId: this.experimentId,
+      manualStopRequested: this.manualStopRequested
+    });
     
-    // Clear any scheduled turn timeout
+    // Set flag like max turns does, let processTurn() handle the actual stopping
+    this.manualStopRequested = true;
+    console.log(`🛑 Stop flag set to: ${this.manualStopRequested} on instance: ${this.instanceId}`);
+    
+    // Clear any scheduled turn timeout immediately
     if (this.turnTimeoutId) {
       clearTimeout(this.turnTimeoutId);
       this.turnTimeoutId = null;
+      console.log('🛑 Cleared scheduled timeout');
     }
     
-    // Reset processing flag
-    this.isProcessingTurn = false;
-    
-    console.log('Experiment stopped at turn', this.state.currentTurn);
-    
-    // Emit experiment stopped event
-    this.wsManager.emitExperimentEvent(this.experimentId, {
-      type: 'experiment_stopped',
-      data: { 
-        finalTurn: this.state.currentTurn,
-        totalMessages: this.state.conversation.length,
-        endTime: this.state.endTime,
-        reason: 'manual_stop' // User clicked stop
-      },
-      timestamp: new Date()
-    });
+    // Clear TTL safety timeout
+    this.clearTTLTimeout();
   }
 
   /**
    * Process a single turn of the conversation
    */
   async processTurn(): Promise<ChatMessage[]> {
-    console.log('processTurn called - isRunning:', this.state.isRunning, 'hasConfig:', !!this.config, 'isProcessingTurn:', this.isProcessingTurn);
+    console.log(`processTurn called on instance: ${this.instanceId} - isRunning:${this.state.isRunning} hasConfig:${!!this.config} isProcessingTurn:${this.isProcessingTurn} manualStopRequested:${this.manualStopRequested}`);
     
     if (!this.state.isRunning || !this.config) {
       const error = 'No experiment is running';
@@ -210,11 +298,13 @@ export class ExperimentManager {
       return [];
     }
 
-    if (this.state.currentTurn >= this.config.maxTurns) {
+    // Check for max turns limit (skip if unlimited: -1)
+    if (this.config.maxTurns !== -1 && this.state.currentTurn >= this.config.maxTurns) {
       console.log(`Max turns reached (${this.state.currentTurn}/${this.config.maxTurns}), stopping experiment`);
       this.state.isRunning = false;
       this.state.endTime = new Date();
       this.isProcessingTurn = false;
+      this.clearTTLTimeout(); // Clear TTL timeout on natural completion
       
       // Emit experiment stopped event for natural completion
       this.wsManager.emitExperimentEvent(this.experimentId, {
@@ -224,6 +314,29 @@ export class ExperimentManager {
           totalMessages: this.state.conversation.length,
           endTime: this.state.endTime,
           reason: 'max_turns'
+        },
+        timestamp: new Date()
+      });
+      
+      return [];
+    }
+
+    // 🛑 NEW: Check for manual stop request (same pattern as max turns)
+    if (this.manualStopRequested) {
+      console.log(`🛑 Manual stop requested (turn ${this.state.currentTurn}), stopping experiment`);
+      this.state.isRunning = false;
+      this.state.endTime = new Date();
+      this.isProcessingTurn = false;
+      this.manualStopRequested = false; // Reset flag
+      
+      // Emit experiment stopped event for manual stop
+      this.wsManager.emitExperimentEvent(this.experimentId, {
+        type: 'experiment_stopped',
+        data: { 
+          finalTurn: this.state.currentTurn,
+          totalMessages: this.state.conversation.length,
+          endTime: this.state.endTime,
+          reason: 'manual_stop'
         },
         timestamp: new Date()
       });
@@ -260,6 +373,37 @@ export class ExperimentManager {
       });
       turnMessages.push(messageA);
       
+      // 🛑 Check if experiment was stopped during Model A processing
+      if (this.manualStopRequested || !this.state.isRunning) {
+        console.log('🛑 Experiment stopped during Model A processing - stopping turn');
+        
+        // Ensure complete cleanup if manual stop was requested
+        if (this.manualStopRequested) {
+          this.state.isRunning = false;
+          this.state.endTime = new Date();
+          this.isProcessingTurn = false;
+          console.log(`🛑 State cleaned up after Model A: isRunning=${this.state.isRunning}, isProcessingTurn=${this.isProcessingTurn}`);
+          
+          // Emit stopped event
+          this.wsManager.emitExperimentEvent(this.experimentId, {
+            type: 'experiment_stopped',
+            data: {
+              finalTurn: this.state.currentTurn,
+              totalMessages: this.state.conversation.length,
+              endTime: this.state.endTime,
+              reason: 'manual_stop'
+            },
+            timestamp: new Date()
+          });
+          
+          // Reset flag after handling
+          this.manualStopRequested = false;
+        }
+        
+        this.isProcessingTurn = false;
+        return turnMessages;
+      }
+      
       // Check if messageA contains a REAL API error (not just the word "error" in content)
       if (messageA.content.startsWith('⚠️ API Error:') || messageA.content.startsWith('Error calling OpenRouter:')) {
         hasErrors = true;
@@ -288,6 +432,37 @@ export class ExperimentManager {
         hasError: messageB.content.includes('Error') 
       });
       turnMessages.push(messageB);
+      
+      // 🛑 Check if experiment was stopped during Model B processing
+      if (this.manualStopRequested || !this.state.isRunning) {
+        console.log('🛑 Experiment stopped during Model B processing - stopping turn');
+        
+        // Ensure complete cleanup if manual stop was requested
+        if (this.manualStopRequested) {
+          this.state.isRunning = false;
+          this.state.endTime = new Date();
+          this.isProcessingTurn = false;
+          console.log(`🛑 State cleaned up after Model B: isRunning=${this.state.isRunning}, isProcessingTurn=${this.isProcessingTurn}`);
+          
+          // Emit stopped event
+          this.wsManager.emitExperimentEvent(this.experimentId, {
+            type: 'experiment_stopped',
+            data: {
+              finalTurn: this.state.currentTurn,
+              totalMessages: this.state.conversation.length,
+              endTime: this.state.endTime,
+              reason: 'manual_stop'
+            },
+            timestamp: new Date()
+          });
+          
+          // Reset flag after handling
+          this.manualStopRequested = false;
+        }
+        
+        this.isProcessingTurn = false;
+        return turnMessages;
+      }
       
       // Check if messageB contains a REAL API error (not just the word "error" in content)
       if (messageB.content.startsWith('⚠️ API Error:') || messageB.content.startsWith('Error calling OpenRouter:')) {
@@ -389,34 +564,74 @@ export class ExperimentManager {
       // Emit current experiment state
       this.wsManager.emitExperimentState(this.experimentId, this.getState());
 
+      // 🛑 Final check: Don't continue if experiment was stopped during this turn
+      if (this.manualStopRequested || !this.state.isRunning) {
+        console.log('🛑 Experiment stopped during turn processing - not scheduling next turn');
+        
+        // Ensure complete cleanup if manual stop was requested
+        if (this.manualStopRequested) {
+          this.state.isRunning = false;
+          this.state.endTime = new Date();
+          this.isProcessingTurn = false;
+          console.log(`🛑 State cleaned up at final turn check: isRunning=${this.state.isRunning}, isProcessingTurn=${this.isProcessingTurn}`);
+          
+          // Emit stopped event
+          this.wsManager.emitExperimentEvent(this.experimentId, {
+            type: 'experiment_stopped',
+            data: {
+              finalTurn: this.state.currentTurn,
+              totalMessages: this.state.conversation.length,
+              endTime: this.state.endTime,
+              reason: 'manual_stop'
+            },
+            timestamp: new Date()
+          });
+          
+          // Reset flag after handling
+          this.manualStopRequested = false;
+        }
+        
+        this.isProcessingTurn = false;
+        return turnMessages;
+      }
+
       // Stop experiment if there were errors
       if (hasErrors) {
         console.log('Stopping experiment due to API errors');
         this.state.isRunning = false;
         this.isProcessingTurn = false;
       } else {
-        // Continue to next turn if no errors and haven't reached max turns
-        if (this.state.currentTurn < this.config.maxTurns) {
-          console.log('Scheduling next turn...');
+        // Continue to next turn if no errors and haven't reached max turns (or unlimited) and not manually stopped
+        if (!this.manualStopRequested && (this.config.maxTurns === -1 || this.state.currentTurn < this.config.maxTurns)) {
+          const turnsInfo = this.config.maxTurns === -1 ? 'unlimited turns' : `${this.state.currentTurn}/${this.config.maxTurns} turns`;
+          console.log(`Scheduling next turn... (${turnsInfo})`);
           this.isProcessingTurn = false; // Reset flag before scheduling
           this.turnTimeoutId = setTimeout(() => this.processTurn(), 2000);
         } else {
-          console.log('Experiment completed - max turns reached');
+          const reason = this.manualStopRequested ? 'manual stop requested' : 'max turns reached';
+          console.log(`Experiment completed - ${reason}`);
           this.state.isRunning = false;
           this.state.endTime = new Date();
           this.isProcessingTurn = false;
+          this.clearTTLTimeout(); // Clear TTL timeout on completion
           
           // Emit experiment stopped event for natural completion
+          const stopReason = this.manualStopRequested ? 'manual_stop' : 'max_turns';
           this.wsManager.emitExperimentEvent(this.experimentId, {
             type: 'experiment_stopped',
             data: { 
               finalTurn: this.state.currentTurn,
               totalMessages: this.state.conversation.length,
               endTime: this.state.endTime,
-              reason: 'max_turns' // Completed naturally
+              reason: stopReason
             },
             timestamp: new Date()
           });
+          
+          // Reset manual stop flag after handling
+          if (this.manualStopRequested) {
+            this.manualStopRequested = false;
+          }
         }
       }
 
@@ -437,6 +652,43 @@ export class ExperimentManager {
     model: 'A' | 'B', 
     modelName: string
   ): Promise<ChatMessage> {
+    
+    // 🛑 Check for stop request before starting any model processing
+    if (this.manualStopRequested) {
+      console.log(`🛑 Manual stop detected - aborting Model ${model} processing before it starts`);
+      
+      // Perform complete cleanup when stopping during model processing
+      this.state.isRunning = false;
+      this.state.endTime = new Date();
+      this.isProcessingTurn = false;
+      console.log(`🛑 State cleaned up: isRunning=${this.state.isRunning}, isProcessingTurn=${this.isProcessingTurn}`);
+      
+      // Emit stopped event
+      this.wsManager.emitExperimentEvent(this.experimentId, {
+        type: 'experiment_stopped',
+        data: {
+          finalTurn: this.state.currentTurn,
+          totalMessages: this.state.conversation.length,
+          endTime: this.state.endTime,
+          reason: 'manual_stop'
+        },
+        timestamp: new Date()
+      });
+      
+      // Reset flag after handling
+      this.manualStopRequested = false;
+      
+      return {
+        id: `${model}-${this.state.currentTurn + 1}`,
+        model,
+        modelName,
+        turn: this.state.currentTurn + 1,
+        content: '[⚠️ Model processing cancelled - experiment stopped]',
+        thinking: '',
+        timestamp: new Date(),
+        tokensUsed: 0
+      };
+    }
     if (!this.config) {
       throw new Error('No experiment configuration available');
     }
@@ -491,7 +743,22 @@ export class ExperimentManager {
       let lastEmitTime = Date.now();
       const THROTTLE_MS = 100; // Emit updates at most every 100ms
       
-      console.log(`Starting streaming for Model ${model} (${modelName})`);
+      console.log(`Starting streaming for Model ${model} (${modelName}) on instance ${this.instanceId} - Stop flag: ${this.manualStopRequested}`);
+
+      // 🛑 Double-check stop flag before starting stream
+      if (this.manualStopRequested) {
+        console.log(`🛑 Manual stop detected - aborting stream before it starts for Model ${model}`);
+        return {
+          id: `${model}-${this.state.currentTurn + 1}`,
+          model,
+          modelName,
+          turn: this.state.currentTurn + 1,
+          content: '[⚠️ Streaming cancelled - experiment stopped]',
+          thinking: '',
+          timestamp: new Date(),
+          tokensUsed: 0
+        };
+      }
 
       // Add stream timeout protection (60 seconds)
       const streamTimeout = setTimeout(() => {
@@ -506,12 +773,47 @@ export class ExperimentManager {
         // Process the stream with enhanced real-time updates and timeout detection
         for await (const chunk of stream) {
           lastChunkTime = Date.now();
-        chunkCount++;
+          chunkCount++;
+          
+          // 🛑 CRITICAL: Check if experiment was stopped during streaming (check EVERY chunk)
+          if (this.manualStopRequested) {
+            console.log(`🛑 MANUAL STOP DETECTED during Model ${model} streaming - breaking stream at chunk ${chunkCount}`);
+            fullContent += ' [⚠️ Response interrupted - manual stop requested]';
+            
+            // Emit final update showing interruption
+            streamingMessage.content = fullContent;
+            streamingMessage.isComplete = true;
+            this.wsManager.emitStreamingMessage(this.experimentId, streamingMessage);
+            
+            // Perform complete cleanup when stopping during streaming
+            this.state.isRunning = false;
+            this.state.endTime = new Date();
+            this.isProcessingTurn = false;
+            console.log(`🛑 State cleaned up during streaming: isRunning=${this.state.isRunning}, isProcessingTurn=${this.isProcessingTurn}`);
+            
+            // Emit stopped event
+            this.wsManager.emitExperimentEvent(this.experimentId, {
+              type: 'experiment_stopped',  
+              data: {
+                finalTurn: this.state.currentTurn,
+                totalMessages: this.state.conversation.length,
+                endTime: this.state.endTime,
+                reason: 'manual_stop'
+              },
+              timestamp: new Date()
+            });
+            
+            // Reset flag after handling
+            this.manualStopRequested = false;
+            
+            streamCompleted = false;
+            break; // Exit streaming loop immediately
+          }
         
-        // Handle content delta
-        if (chunk.choices?.[0]?.delta?.content) {
-          const deltaContent = chunk.choices[0].delta.content;
-          fullContent += deltaContent;
+          // Handle content delta
+          if (chunk.choices?.[0]?.delta?.content) {
+            const deltaContent = chunk.choices[0].delta.content;
+            fullContent += deltaContent;
           
                      // Throttle emissions to prevent overwhelming WebSocket
            const now = Date.now();
@@ -983,4 +1285,4 @@ export class ExperimentManager {
 }
 
 // Export singleton instance
-export const experimentManager = new ExperimentManager(); 
+export const experimentManager = ExperimentManager.getInstance(); 

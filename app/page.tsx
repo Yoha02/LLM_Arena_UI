@@ -96,6 +96,39 @@ export default function LLMArena() {
     endTime?: Date;
   } | null>(null)
 
+  // Browser safety: Auto-stop experiment when user closes browser/tab
+  useEffect(() => {
+    const handleBeforeUnload = async (event: BeforeUnloadEvent) => {
+      if (isExperimentRunning) {
+        console.log('🚨 Browser closing during active experiment - attempting auto-stop...');
+        
+        try {
+          // Attempt to stop the experiment
+          await fetch('/api/experiment/stop', {
+            method: 'POST',
+            keepalive: true // Ensure request completes even if page is closing
+          });
+          console.log('✅ Experiment auto-stopped due to browser close');
+        } catch (error) {
+          console.error('❌ Failed to auto-stop experiment on browser close:', error);
+        }
+        
+        // Show warning to user (browser will display this)
+        const message = 'An experiment is currently running. Closing will stop it.';
+        event.returnValue = message;
+        return message;
+      }
+    };
+
+    // Add event listener
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    // Cleanup
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isExperimentRunning])
+
   // Enhanced WebSocket event handlers for real-time streaming
   const handleExperimentEvent = useCallback((event: ExperimentEvent) => {
     console.log('Received experiment event:', event)
@@ -613,11 +646,11 @@ export default function LLMArena() {
         // Clear status after a few seconds
         setTimeout(() => setExperimentStatus(""), 5000)
       } else {
-        console.error('Failed to stop experiment')
+        console.error('Failed to stop experiment');
         setExperimentError('Failed to stop experiment')
       }
     } catch (error) {
-      console.error('Error stopping experiment:', error)
+      console.error('Error stopping experiment:', error);
       setExperimentError('Error stopping experiment')
     }
   }

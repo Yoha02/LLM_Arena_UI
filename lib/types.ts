@@ -4,7 +4,7 @@ export interface ExperimentConfig {
   sharedPrompt?: string
   promptA?: string
   promptB?: string
-  maxTurns: number
+  maxTurns: number // -1 indicates unlimited turns
   modelA: string
   modelB: string
   apiKeyA?: string // Optional - uses environment variable if not provided

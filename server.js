@@ -34,11 +34,14 @@ app.prepare().then(() => {
     },
     transports: ['websocket', 'polling'], // Support both transports
     allowEIO3: true, // Backward compatibility
-    pingTimeout: 60000, // Longer ping timeout
-    pingInterval: 25000, // Ping interval
+    pingTimeout: 20000, // 20 seconds to detect crashes/disconnects
+    pingInterval: 10000, // Ping every 10 seconds for faster detection
     upgradeTimeout: 30000, // Upgrade timeout
     maxHttpBufferSize: 1e6 // 1MB buffer
   });
+
+  // Track active clients per experiment for auto-stop functionality
+  const experimentClients = new Map(); // experimentId -> Set of socketIds
 
   // Handle WebSocket connections with enhanced logging
   io.on('connection', (socket) => {
@@ -52,6 +55,15 @@ app.prepare().then(() => {
     socket.on('join-experiment', (experimentId) => {
       socket.join(`experiment-${experimentId}`);
       console.log(`🏠 Client ${socket.id} joined experiment ${experimentId}`);
+      
+      // Track client for this experiment
+      if (!experimentClients.has(experimentId)) {
+        experimentClients.set(experimentId, new Set());
+      }
+      experimentClients.get(experimentId).add(socket.id);
+      socket.currentExperiment = experimentId; // Store on socket for disconnect handling
+      
+      console.log(`📊 Experiment ${experimentId} now has ${experimentClients.get(experimentId).size} active clients`);
       
       // Confirm join with client
       socket.emit('joined-experiment', { experimentId, success: true });
@@ -74,10 +86,67 @@ app.prepare().then(() => {
     socket.on('leave-experiment', (experimentId) => {
       socket.leave(`experiment-${experimentId}`);
       console.log(`🚪 Client ${socket.id} left experiment ${experimentId}`);
+      
+      // Remove client from experiment tracking
+      if (experimentClients.has(experimentId)) {
+        experimentClients.get(experimentId).delete(socket.id);
+        if (experimentClients.get(experimentId).size === 0) {
+          experimentClients.delete(experimentId);
+        }
+        console.log(`📊 Experiment ${experimentId} now has ${experimentClients.has(experimentId) ? experimentClients.get(experimentId).size : 0} active clients`);
+      }
+      socket.currentExperiment = null;
     });
 
-    socket.on('disconnect', (reason) => {
-      console.log('🔌 WebSocket client disconnected:', socket.id, 'Reason:', reason);
+    socket.on('disconnect', async (reason) => {
+      console.log('🔌 WebSocket client disconnected:', socket.id, 'Reason:', reason, 'Timestamp:', new Date().toISOString());
+      
+      // Handle auto-stop for experiments when browser closes
+      if (socket.currentExperiment) {
+        const experimentId = socket.currentExperiment;
+        console.log(`🛑 Client ${socket.id} was part of experiment ${experimentId}, checking if auto-stop needed...`);
+        console.log(`📋 Current experiment clients map:`, Array.from(experimentClients.entries()).map(([id, clients]) => ({ id, clientCount: clients.size })));
+        
+        // Remove client from experiment tracking
+        if (experimentClients.has(experimentId)) {
+          experimentClients.get(experimentId).delete(socket.id);
+          const remainingClients = experimentClients.get(experimentId).size;
+          
+          console.log(`📊 Experiment ${experimentId} now has ${remainingClients} active clients`);
+          
+          // If no clients remain, auto-stop the experiment
+          if (remainingClients === 0) {
+            console.log(`🚨 No clients remain for experiment ${experimentId} - AUTO-STOPPING to prevent infinite loop`);
+            
+            try {
+              // Make HTTP request to stop API endpoint (more reliable than import)
+              console.log('🔧 Making HTTP request to stop API...');
+              const fetch = (await import('node-fetch')).default;
+              
+              const response = await fetch('http://localhost:3000/api/experiment/stop', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                timeout: 5000
+              });
+              
+              if (response.ok) {
+                const result = await response.json();
+                console.log(`✅ Experiment ${experimentId} auto-stopped via API:`, result.message);
+              } else {
+                console.log(`ℹ️ Stop API response: ${response.status} - experiment may not have been running`);
+              }
+              
+              // Clean up tracking
+              experimentClients.delete(experimentId);
+              
+            } catch (error) {
+              console.error(`❌ Error auto-stopping experiment ${experimentId} via API:`, error.message);
+              // Still clean up tracking even if API call failed
+              experimentClients.delete(experimentId);
+            }
+          }
+        }
+      }
     });
 
     socket.on('error', (error) => {

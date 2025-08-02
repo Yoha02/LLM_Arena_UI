@@ -317,7 +317,7 @@ const PDFExperimentSetup: React.FC<{ config: ExperimentConfig }> = ({ config }) 
         </Text>
       </View>
       <View style={styles.setupItem}>
-        <Text>Max Turns: {config.maxTurns}</Text>
+        <Text>Max Turns: {config.maxTurns === -1 ? 'Unlimited' : config.maxTurns}</Text>
       </View>
       <View style={styles.setupItem}>
         <Text>Model A:</Text>
