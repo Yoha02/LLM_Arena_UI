@@ -16,7 +16,7 @@ The LLM Arena is a sophisticated web-based research platform designed to study b
 
 ## 🚀 Live Demo
 
-**[View Live Application](https://llmarea.io/)**
+**[View Live Application](https://llmarena.io/)**
 
 ![LLM Arena Interface](images/LLM_Arena_UI.png)
 *Complete LLM Arena interface showing dual model panels, real-time conversation log, and live sentiment analysis dashboards*
@@ -279,7 +279,7 @@ This project is designed for academic and research use. Please cite appropriatel
 
 ## 🔗 Links
 
-- **Live Application**: [https://LLMArea.io](https://llmarena.io/)
+- **Live Application**: [https://LLMArena.io](https://llmarena.io/)
 
 ---
 
