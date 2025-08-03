@@ -54,6 +54,33 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     thinkingExtractionMethod: 'structured'
   },
   
+  // Llama 3.3 70B (Chain-of-thought)
+  'llama-3.3-70b': {
+    name: 'Llama 3.3 70B Instruct',
+    openrouterName: 'meta-llama/llama-3.3-70b-instruct',
+    maxTokens: 4096,
+    supportsNativeThinking: false,
+    thinkingExtractionMethod: 'chain-of-thought'
+  },
+  
+  // Microsoft Phi-4 Reasoning Plus (Reasoning support)
+  'phi-4-reasoning': {
+    name: 'Phi-4 Reasoning Plus',
+    openrouterName: 'microsoft/phi-4-reasoning-plus',
+    maxTokens: 4096,
+    supportsNativeThinking: true,
+    thinkingExtractionMethod: 'chain-of-thought'
+  },
+  
+  // Google Gemma 3 27B (Free tier)
+  'gemma-3-27b': {
+    name: 'Gemma 3 27B Instruct (Free)',
+    openrouterName: 'google/gemma-3-27b-it:free',
+    maxTokens: 4096,
+    supportsNativeThinking: false,
+    thinkingExtractionMethod: 'generic'
+  },
+  
   // Fallback models
   'gpt-4-turbo': {
     name: 'GPT-4 Turbo',
