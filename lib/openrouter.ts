@@ -63,12 +63,12 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     thinkingExtractionMethod: 'chain-of-thought'
   },
   
-  // Microsoft Phi-4 Reasoning Plus (Reasoning support)
-  'phi-4-reasoning': {
-    name: 'Phi-4 Reasoning Plus',
-    openrouterName: 'microsoft/phi-4-reasoning-plus',
+  // Microsoft Phi-4 (Standard version)
+  'phi-4': {
+    name: 'Microsoft Phi-4 14B',
+    openrouterName: 'microsoft/phi-4',
     maxTokens: 4096,
-    supportsNativeThinking: true,
+    supportsNativeThinking: false,
     thinkingExtractionMethod: 'chain-of-thought'
   },
   
