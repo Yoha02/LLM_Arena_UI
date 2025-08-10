@@ -81,6 +81,23 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     thinkingExtractionMethod: 'generic'
   },
   
+  // OpenAI OSS Models
+  'gpt-oss-120b': {
+    name: 'GPT OSS 120B',
+    openrouterName: 'openai/gpt-oss-120b',
+    maxTokens: 4096,
+    supportsNativeThinking: true,
+    thinkingExtractionMethod: 'chain-of-thought'
+  },
+  
+  'gpt-oss-20b': {
+    name: 'GPT OSS 20B (Free)',
+    openrouterName: 'openai/gpt-oss-20b:free',
+    maxTokens: 4096,
+    supportsNativeThinking: true,
+    thinkingExtractionMethod: 'chain-of-thought'
+  },
+  
   // Fallback models
   'gpt-4-turbo': {
     name: 'GPT-4 Turbo',
