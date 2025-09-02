@@ -168,6 +168,12 @@ export class ExperimentManager {
         this.state.endTime = new Date();
         this.isProcessingTurn = false;
         
+        // Reset manual mode state for TTL timeout
+        this.state.waitingForUser = false;
+        this.state.nextExpectedModel = null;
+        this.state.pauseReason = '';
+        this.manualStopRequested = false;
+        
         // Clear any pending turn timeout
         if (this.turnTimeoutId) {
           clearTimeout(this.turnTimeoutId);
@@ -262,10 +268,11 @@ async stopExperiment(): Promise<void> {
       isRunning: this.state.isRunning,
       isProcessingTurn: this.isProcessingTurn,
       experimentId: this.experimentId,
-      manualStopRequested: this.manualStopRequested
+      manualStopRequested: this.manualStopRequested,
+      waitingForUser: this.state.waitingForUser
     });
     
-    // Set flag like max turns does, let processTurn() handle the actual stopping
+    // Set flag for any ongoing processing
     this.manualStopRequested = true;
     console.log(`🛑 Stop flag set to: ${this.manualStopRequested} on instance: ${this.instanceId}`);
     
@@ -278,6 +285,38 @@ async stopExperiment(): Promise<void> {
     
     // Clear TTL safety timeout
     this.clearTTLTimeout();
+    
+    // 🔧 IMMEDIATE CLEANUP: Always clean up state immediately for manual stops
+    // This ensures the experiment is properly stopped regardless of processing state
+    console.log('🛑 Performing immediate cleanup for manual stop');
+    this.state.isRunning = false;
+    this.state.endTime = new Date();
+    this.state.waitingForUser = false;
+    this.state.nextExpectedModel = null;
+    this.state.pauseReason = '';
+    this.isProcessingTurn = false; // Also reset processing flag
+    this.manualStopRequested = false; // Reset flag after cleanup
+    
+    console.log('🛑 State cleaned up immediately:', {
+      isRunning: this.state.isRunning,
+      isProcessingTurn: this.isProcessingTurn,
+      waitingForUser: this.state.waitingForUser,
+      manualStopRequested: this.manualStopRequested
+    });
+    
+    // Emit stopped event
+    this.wsManager.emitExperimentEvent(this.experimentId, {
+      type: 'experiment_stopped',
+      data: {
+        finalTurn: this.state.currentTurn,
+        totalMessages: this.state.conversation.length,
+        endTime: this.state.endTime,
+        reason: 'manual_stop'
+      },
+      timestamp: new Date()
+    });
+    
+    console.log('🛑 Manual stop completed - experiment fully stopped');
   }
 
   /**
@@ -362,6 +401,32 @@ async stopExperiment(): Promise<void> {
     });
     
     try {
+      // 🎮 MANUAL MODE: Pause before Model A for user to edit prompt
+      if (this.config.experimentMode === 'manual') {
+        console.log('🎮 Manual mode: Pausing before Model A for user to edit prompt');
+        this.state.waitingForUser = true;
+        this.state.nextExpectedModel = 'A';
+        this.state.pauseReason = 'turn_start';
+        this.isProcessingTurn = false;
+        
+        // Emit waiting for user event
+        this.wsManager.emitExperimentEvent(this.experimentId, {
+          type: 'waiting_for_user',
+          data: {
+            reason: 'turn_start',
+            currentTurn: this.state.currentTurn + 1,
+            nextModel: 'A',
+            canContinue: true,
+            conversation: this.state.conversation, // Include current conversation
+            config: this.config // Include config for prompt building
+          },
+          timestamp: new Date()
+        });
+        
+        // Return early - user will manually trigger Model A
+        return turnMessages;
+      }
+      
       console.log('Processing Model A:', this.config.modelA);
       // Model A's turn
       const messageA = await this.processModelResponse('A', this.config.modelA);
@@ -418,6 +483,32 @@ async stopExperiment(): Promise<void> {
       // ✅ CRITICAL FIX: Add Model A's message to conversation BEFORE Model B processes
       this.state.conversation.push(messageA);
       console.log('Added Model A message to conversation. New length:', this.state.conversation.length);
+      
+      // 🎮 MANUAL MODE: Pause after Model A for user to edit prompt for Model B
+      if (this.config.experimentMode === 'manual') {
+        console.log('🎮 Manual mode: Pausing after Model A for user to edit prompt for Model B');
+        this.state.waitingForUser = true;
+        this.state.nextExpectedModel = 'B';
+        this.state.pauseReason = 'model_completed';
+        this.isProcessingTurn = false;
+        
+        // Emit waiting for user event
+        this.wsManager.emitExperimentEvent(this.experimentId, {
+          type: 'waiting_for_user',
+          data: {
+            reason: 'model_completed',
+            currentTurn: this.state.currentTurn + 1,
+            nextModel: 'B',
+            canContinue: true,
+            conversation: this.state.conversation, // Include current conversation
+            config: this.config // Include config for prompt building
+          },
+          timestamp: new Date()
+        });
+        
+        // Return early - user will manually trigger Model B
+        return turnMessages;
+      }
       
       // NOTE: Model A's metrics are already sent via targeted emission in processModelResponse()
       // No need for additional full state emission here to prevent flickering
@@ -476,11 +567,24 @@ async stopExperiment(): Promise<void> {
       console.log('Added Model B message to conversation. Final length:', this.state.conversation.length);
 
       this.state.currentTurn++;
-      // ✅ Messages already added to conversation individually above
       
-      // 🔍 JUDGE EVALUATION: Analyze this turn for goal deviation and cooperation
-      try {
-        console.log('🔍 Starting judge evaluation for turn', this.state.currentTurn);
+      // 🔍 JUDGE EVALUATION: Run for BOTH manual and automatic modes with timeout
+      console.log('🔍 Starting judge evaluation for turn', this.state.currentTurn);
+      console.log('🔍 Judge API key exists:', !!this.judgeEvaluator);
+      console.log('🔍 Messages for evaluation:', { messageA: !!messageA, messageB: !!messageB });
+      
+      // Emit judge evaluation started event
+      this.wsManager.emitExperimentEvent(this.experimentId, {
+        type: 'judge_evaluation_started',
+        data: {
+          turn: this.state.currentTurn,
+          analyzing: true
+        },
+        timestamp: new Date()
+      });
+      
+      // Create a promise with timeout to prevent hanging
+      const judgeEvaluationPromise = async () => {
         const originalPrompts = {
           shared: this.config.promptingMode === 'shared' ? this.config.sharedPrompt : undefined,
           promptA: this.config.promptingMode === 'individual' ? this.config.promptA : undefined,
@@ -531,11 +635,94 @@ async stopExperiment(): Promise<void> {
         this.wsManager.emitModelMetrics(this.experimentId, 'A', this.state.metricsA);
         this.wsManager.emitModelMetrics(this.experimentId, 'B', this.state.metricsB);
         console.log('✅ Judge metrics successfully emitted for both WebSocket and polling transports');
+        
+        // Emit judge evaluation completed event
+        this.wsManager.emitExperimentEvent(this.experimentId, {
+          type: 'judge_evaluation_completed',
+          data: {
+            turn: this.state.currentTurn,
+            analyzing: false,
+            results: {
+              modelA: {
+                goalDeviation: turnAnalysis.modelA.goalDeviationScore,
+                cooperation: turnAnalysis.modelA.cooperationScore,
+                sentiment: turnAnalysis.modelA.sentimentAnalysis
+              },
+              modelB: {
+                goalDeviation: turnAnalysis.modelB.goalDeviationScore,
+                cooperation: turnAnalysis.modelB.cooperationScore,
+                sentiment: turnAnalysis.modelB.sentimentAnalysis
+              }
+            }
+          },
+          timestamp: new Date()
+        });
+        
+        return turnAnalysis;
+      };
 
+      // Run with timeout to prevent hanging
+      try {
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Judge evaluation timeout after 30 seconds')), 30000);
+        });
+        
+        await Promise.race([judgeEvaluationPromise(), timeoutPromise]);
+        
       } catch (error) {
         console.error('❌ Judge evaluation failed:', error);
-        // Continue without judge evaluation if it fails
+        console.log('📊 Proceeding without judge evaluation - using default metrics');
+        
+        // Emit judge evaluation failed event
+        this.wsManager.emitExperimentEvent(this.experimentId, {
+          type: 'judge_evaluation_completed',
+          data: {
+            turn: this.state.currentTurn,
+            analyzing: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          },
+          timestamp: new Date()
+        });
       }
+      
+      // 🎮 MANUAL MODE: Pause after Model B for user to decide on next turn
+      if (this.config.experimentMode === 'manual') {
+        console.log('🎮 Manual mode: Pausing after Model B for user to decide on next turn');
+        this.state.waitingForUser = true;
+        this.state.nextExpectedModel = 'A';
+        this.state.pauseReason = 'turn_completed';
+        this.isProcessingTurn = false;
+        
+        // Emit turn completed event first
+        this.wsManager.emitExperimentEvent(this.experimentId, {
+          type: 'turn_completed',
+          data: {
+            turn: this.state.currentTurn,
+            messages: [messageA, messageB],
+            totalMessages: this.state.conversation.length
+          },
+          timestamp: new Date()
+        });
+        
+        // Then emit waiting for user event
+        this.wsManager.emitExperimentEvent(this.experimentId, {
+          type: 'waiting_for_user',
+          data: {
+            reason: 'turn_completed',
+            currentTurn: this.state.currentTurn,
+            nextModel: 'A',
+            canContinue: this.config.maxTurns === -1 || this.state.currentTurn < this.config.maxTurns,
+            conversation: this.state.conversation, // Include current conversation
+            config: this.config // Include config for prompt building
+          },
+          timestamp: new Date()
+        });
+        
+        // Return early - user will manually trigger next turn or end experiment
+        return turnMessages;
+      }
+      
+      // ✅ Messages already added to conversation individually above
       
       console.log('Turn completed successfully:', {
         currentTurn: this.state.currentTurn, 
@@ -601,36 +788,59 @@ async stopExperiment(): Promise<void> {
         this.state.isRunning = false;
         this.isProcessingTurn = false;
       } else {
-        // Continue to next turn if no errors and haven't reached max turns (or unlimited) and not manually stopped
-        if (!this.manualStopRequested && (this.config.maxTurns === -1 || this.state.currentTurn < this.config.maxTurns)) {
-          const turnsInfo = this.config.maxTurns === -1 ? 'unlimited turns' : `${this.state.currentTurn}/${this.config.maxTurns} turns`;
-          console.log(`Scheduling next turn... (${turnsInfo})`);
-          this.isProcessingTurn = false; // Reset flag before scheduling
-          this.turnTimeoutId = setTimeout(() => this.processTurn(), 2000);
-        } else {
-          const reason = this.manualStopRequested ? 'manual stop requested' : 'max turns reached';
-          console.log(`Experiment completed - ${reason}`);
-          this.state.isRunning = false;
-          this.state.endTime = new Date();
+        // Handle manual vs automatic mode for turn progression
+        if (this.config.experimentMode === 'manual') {
+          console.log('🎮 Manual mode: Pausing for user input after turn completion');
+          this.state.waitingForUser = true;
+          this.state.nextExpectedModel = 'A'; // Next turn will start with Model A
+          this.state.pauseReason = 'turn_completed';
           this.isProcessingTurn = false;
-          this.clearTTLTimeout(); // Clear TTL timeout on completion
           
-          // Emit experiment stopped event for natural completion
-          const stopReason = this.manualStopRequested ? 'manual_stop' : 'max_turns';
+          // Emit waiting for user event
           this.wsManager.emitExperimentEvent(this.experimentId, {
-            type: 'experiment_stopped',
-            data: { 
-              finalTurn: this.state.currentTurn,
-              totalMessages: this.state.conversation.length,
-              endTime: this.state.endTime,
-              reason: stopReason
+            type: 'waiting_for_user',
+            data: {
+              reason: 'turn_completed',
+              currentTurn: this.state.currentTurn,
+              nextModel: 'A',
+              canContinue: this.config.maxTurns === -1 || this.state.currentTurn < this.config.maxTurns,
+              conversation: this.state.conversation, // Include current conversation
+              config: this.config // Include config for prompt building
             },
             timestamp: new Date()
           });
-          
-          // Reset manual stop flag after handling
-          if (this.manualStopRequested) {
-            this.manualStopRequested = false;
+        } else {
+          // Automatic mode - continue to next turn if no errors and haven't reached max turns
+          if (!this.manualStopRequested && (this.config.maxTurns === -1 || this.state.currentTurn < this.config.maxTurns)) {
+            const turnsInfo = this.config.maxTurns === -1 ? 'unlimited turns' : `${this.state.currentTurn}/${this.config.maxTurns} turns`;
+            console.log(`Scheduling next turn... (${turnsInfo})`);
+            this.isProcessingTurn = false; // Reset flag before scheduling
+            this.turnTimeoutId = setTimeout(() => this.processTurn(), 2000);
+          } else {
+            const reason = this.manualStopRequested ? 'manual stop requested' : 'max turns reached';
+            console.log(`Experiment completed - ${reason}`);
+            this.state.isRunning = false;
+            this.state.endTime = new Date();
+            this.isProcessingTurn = false;
+            this.clearTTLTimeout(); // Clear TTL timeout on completion
+            
+            // Emit experiment stopped event for natural completion
+            const stopReason = this.manualStopRequested ? 'manual_stop' : 'max_turns';
+            this.wsManager.emitExperimentEvent(this.experimentId, {
+              type: 'experiment_stopped',
+              data: { 
+                finalTurn: this.state.currentTurn,
+                totalMessages: this.state.conversation.length,
+                endTime: this.state.endTime,
+                reason: stopReason
+              },
+              timestamp: new Date()
+            });
+            
+            // Reset manual stop flag after handling
+            if (this.manualStopRequested) {
+              this.manualStopRequested = false;
+            }
           }
         }
       }
@@ -650,7 +860,8 @@ async stopExperiment(): Promise<void> {
    */
   private async processModelResponse(
     model: 'A' | 'B', 
-    modelName: string
+    modelName: string,
+    customPrompt?: string
   ): Promise<ChatMessage> {
     
     // 🛑 Check for stop request before starting any model processing
@@ -699,8 +910,8 @@ async stopExperiment(): Promise<void> {
     // Build conversation history for this model
     const conversationHistory = this.buildConversationHistory(model);
     
-    // Get the appropriate prompt
-    const prompt = this.getPromptForModel(model, isFirstTurn);
+    // Get the appropriate prompt (use custom prompt if provided)
+    const prompt = this.getPromptForModel(model, isFirstTurn, customPrompt);
     
     // Enhance prompt with thinking instructions
     const enhancedPrompt = thinkingExtractor.generateThinkingPrompt(modelName, prompt);
@@ -1183,18 +1394,33 @@ async stopExperiment(): Promise<void> {
   /**
    * Get the prompt for a model for the current turn
    */
-  private getPromptForModel(model: 'A' | 'B', isFirstTurn: boolean): string {
+  private getPromptForModel(model: 'A' | 'B', isFirstTurn: boolean, customPrompt?: string): string {
     if (!this.config) return '';
 
-    if (isFirstTurn) {
-      // ✅ SIMPLIFIED first turn prompt
-      return `You are Model ${model}. Please begin the conversation based on your scenario instructions.`;
+    // Use custom prompt if provided (for manual mode prompt injection)
+    if (customPrompt) {
+      return customPrompt;
     }
 
-    // ✅ SIMPLIFIED continuing turn prompt 
+    // Use user-defined system prompt if available (manual mode)
+    if (this.config.systemPrompt) {
+      if (isFirstTurn) {
+        return this.config.systemPrompt.replace(/{MODEL}/g, model);
+      } else {
+        // For continuing turns, use a simplified continuation with custom system context
+        return `Continue the conversation naturally. Respond to the previous message and advance the dialogue.`;
+      }
+    }
+
+    // Fallback to improved default prompts (remove "other model" references for authenticity)
+    if (isFirstTurn) {
+      return `You are Model ${model}. Begin the conversation based on your scenario instructions. Respond naturally and authentically.`;
+    }
+
+    // Simplified continuing turn prompt 
     const conversationLength = this.state.conversation.length;
     if (conversationLength === 0) {
-      return `You are Model ${model}. Please begin the conversation based on your scenario instructions.`;
+      return `You are Model ${model}. Begin the conversation based on your scenario instructions. Respond naturally and authentically.`;
     }
     
     // Get the last message to provide context
@@ -1202,10 +1428,10 @@ async stopExperiment(): Promise<void> {
     const isResponseToOtherModel = lastMessage.model !== model;
     
     if (isResponseToOtherModel) {
-      return `Please respond to the other model and continue the conversation.`;
+      return `Continue the conversation naturally. Respond to the previous message and advance the dialogue.`;
     } else {
       // This shouldn't happen normally, but handle gracefully
-      return `Continue the conversation with the other model.`;
+      return `Continue the conversation naturally.`;
     }
   }
 
@@ -1282,6 +1508,226 @@ async stopExperiment(): Promise<void> {
   getExperimentId(): string {
     return this.experimentId;
   }
+
+  /**
+   * Process single model with custom prompt (for manual mode)
+   */
+  async processModelWithPrompt(model: 'A' | 'B', customPrompt?: string): Promise<ChatMessage> {
+    console.log(`🎮 Processing Model ${model} with custom prompt in manual mode`);
+    
+    if (!this.config) {
+      throw new Error('No experiment configuration available');
+    }
+
+    const modelName = model === 'A' ? this.config.modelA : this.config.modelB;
+    const message = await this.processModelResponse(model, modelName, customPrompt);
+    
+    // Add message to conversation
+    this.state.conversation.push(message);
+    console.log(`Added Model ${model} message to conversation. New length:`, this.state.conversation.length);
+
+    // Update turn if both models have responded
+    const currentTurnMessages = this.state.conversation.filter(msg => msg.turn === this.state.currentTurn + 1);
+    if (currentTurnMessages.length === 2) {
+      this.state.currentTurn++;
+      console.log(`🎮 Manual mode: Turn ${this.state.currentTurn} completed with both models`);
+      
+      // 🔍 JUDGE EVALUATION: Run when turn completes in manual mode
+      
+      // Emit judge evaluation started event
+      this.wsManager.emitExperimentEvent(this.experimentId, {
+        type: 'judge_evaluation_started',
+        data: {
+          turn: this.state.currentTurn,
+          analyzing: true
+        },
+        timestamp: new Date()
+      });
+      
+      try {
+        console.log('🔍 Running judge evaluation for completed manual turn', this.state.currentTurn);
+        const originalPrompts = {
+          shared: this.config.promptingMode === 'shared' ? this.config.sharedPrompt : undefined,
+          promptA: this.config.promptingMode === 'individual' ? this.config.promptA : undefined,
+          promptB: this.config.promptingMode === 'individual' ? this.config.promptB : undefined
+        };
+
+        const messageA = currentTurnMessages.find(msg => msg.model === 'A');
+        const messageB = currentTurnMessages.find(msg => msg.model === 'B');
+        const historyWithoutCurrentTurn = this.state.conversation.slice(0, -2);
+        
+        if (messageA && messageB) {
+          const turnAnalysis = await this.judgeEvaluator.evaluateTurn(
+            this.state.currentTurn,
+            messageA,
+            messageB,
+            originalPrompts,
+            historyWithoutCurrentTurn
+          );
+
+          // Apply judge evaluation to metrics
+          this.judgeEvaluator.updateMetricsWithJudgeEvaluation(
+            this.state.metricsA, 
+            turnAnalysis.modelA, 
+            this.state.currentTurn
+          );
+          
+          this.judgeEvaluator.updateMetricsWithJudgeEvaluation(
+            this.state.metricsB, 
+            turnAnalysis.modelB, 
+            this.state.currentTurn
+          );
+
+          console.log('✅ Manual mode judge evaluation completed:', {
+            turn: this.state.currentTurn,
+            modelA: { sentiment: turnAnalysis.modelA.sentimentAnalysis },
+            modelB: { sentiment: turnAnalysis.modelB.sentimentAnalysis }
+          });
+
+          // Emit updated metrics
+          this.wsManager.emitModelMetrics(this.experimentId, 'A', this.state.metricsA);
+          this.wsManager.emitModelMetrics(this.experimentId, 'B', this.state.metricsB);
+          console.log('✅ Manual mode judge metrics emitted');
+          
+          // Emit judge evaluation completed event
+          this.wsManager.emitExperimentEvent(this.experimentId, {
+            type: 'judge_evaluation_completed',
+            data: {
+              turn: this.state.currentTurn,
+              analyzing: false,
+              results: {
+                modelA: {
+                  goalDeviation: turnAnalysis.modelA.goalDeviationScore,
+                  cooperation: turnAnalysis.modelA.cooperationScore,
+                  sentiment: turnAnalysis.modelA.sentimentAnalysis
+                },
+                modelB: {
+                  goalDeviation: turnAnalysis.modelB.goalDeviationScore,
+                  cooperation: turnAnalysis.modelB.cooperationScore,
+                  sentiment: turnAnalysis.modelB.sentimentAnalysis
+                }
+              }
+            },
+            timestamp: new Date()
+          });
+        }
+      } catch (error) {
+        console.error('❌ Manual mode judge evaluation failed:', error);
+        
+        // Emit judge evaluation failed event
+        this.wsManager.emitExperimentEvent(this.experimentId, {
+          type: 'judge_evaluation_completed',
+          data: {
+            turn: this.state.currentTurn,
+            analyzing: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          },
+          timestamp: new Date()
+        });
+      }
+      
+      // Emit turn completed event for UI feedback
+      this.wsManager.emitExperimentEvent(this.experimentId, {
+        type: 'turn_completed',
+        data: {
+          turn: this.state.currentTurn,
+          messages: currentTurnMessages,
+          totalMessages: this.state.conversation.length
+        },
+        timestamp: new Date()
+      });
+
+      // Check if we can continue to next turn
+      const canContinue = this.config.maxTurns === -1 || this.state.currentTurn < this.config.maxTurns;
+      
+      if (canContinue) {
+        // Auto-transition to next turn intervention point
+        console.log('🎮 Manual mode: Auto-transitioning to next turn intervention');
+        this.state.waitingForUser = true;
+        this.state.nextExpectedModel = 'A';
+        this.state.pauseReason = 'turn_start';
+        
+        // Emit waiting for user event for next turn
+        this.wsManager.emitExperimentEvent(this.experimentId, {
+          type: 'waiting_for_user',
+          data: {
+            reason: 'turn_start',
+            currentTurn: this.state.currentTurn + 1, // Next turn
+            nextModel: 'A',
+            canContinue: true,
+            conversation: this.state.conversation,
+            config: this.config
+          },
+          timestamp: new Date()
+        });
+      } else {
+        // Max turns reached - end experiment
+        console.log('🏁 Max turns reached - ending experiment');
+        this.state.isRunning = false;
+        this.state.endTime = new Date();
+        
+        this.wsManager.emitExperimentEvent(this.experimentId, {
+          type: 'experiment_stopped',
+          data: {
+            finalTurn: this.state.currentTurn,
+            totalMessages: this.state.conversation.length,
+            endTime: this.state.endTime,
+            reason: 'max_turns'
+          },
+          timestamp: new Date()
+        });
+      }
+    } else {
+      // Set waiting state for next model in same turn
+      this.state.waitingForUser = true;
+      this.state.nextExpectedModel = model === 'A' ? 'B' : 'A';
+      this.state.pauseReason = 'model_completed';
+      
+      // Emit waiting for user event
+      this.wsManager.emitExperimentEvent(this.experimentId, {
+        type: 'waiting_for_user',
+        data: {
+          reason: 'model_completed',
+          currentTurn: this.state.currentTurn,
+          nextModel: this.state.nextExpectedModel,
+          canContinue: true,
+          conversation: this.state.conversation, // Include current conversation
+          config: this.config // Include config for prompt building
+        },
+        timestamp: new Date()
+      });
+    }
+
+    return message;
+  }
+
+  /**
+   * Start next turn in manual mode
+   */
+  async startNextTurn(): Promise<void> {
+    console.log('🎮 Starting next turn in manual mode');
+    
+    if (!this.config) {
+      throw new Error('No experiment configuration available');
+    }
+
+    // Check if we can continue
+    if (this.config.maxTurns !== -1 && this.state.currentTurn >= this.config.maxTurns) {
+      console.log('Cannot start next turn: max turns reached');
+      throw new Error('Maximum turns reached');
+    }
+
+    // Reset manual mode state for new turn
+    this.state.waitingForUser = false;
+    this.state.nextExpectedModel = 'A';
+    this.state.pauseReason = '';
+
+    // In manual mode, processTurn() will immediately pause before Model A
+    // This ensures consistent dual intervention flow for all turns
+    console.log('🎮 Calling processTurn() - will pause before Model A in manual mode');
+    this.processTurn();
+  }
+
 }
 
 // Export singleton instance

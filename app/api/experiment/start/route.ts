@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     
     // Validate required fields (API keys can be undefined to use environment variables)
-    const requiredFields = ['promptingMode', 'maxTurns', 'modelA', 'modelB'];
+    const requiredFields = ['experimentMode', 'promptingMode', 'maxTurns', 'modelA', 'modelB'];
     for (const field of requiredFields) {
       if (!body[field]) {
         return NextResponse.json(
@@ -58,6 +58,8 @@ export async function POST(request: NextRequest) {
 
     // Create experiment configuration
     const config: ExperimentConfig = {
+      experimentMode: body.experimentMode || 'automatic', // Default to automatic for backward compatibility
+      systemPrompt: body.systemPrompt,
       promptingMode: body.promptingMode,
       sharedPrompt: body.sharedPrompt,
       promptA: body.promptA,

@@ -51,6 +51,8 @@ interface ModelOption {
 }
 
 export default function LLMArena() {
+  const [experimentMode, setExperimentMode] = useState<"automatic" | "manual">("automatic")
+  const [systemPrompt, setSystemPrompt] = useState("")
   const [promptingMode, setPromptingMode] = useState<"shared" | "individual">("shared")
   const [sharedPrompt, setSharedPrompt] = useState("")
   const [promptA, setPromptA] = useState("")
@@ -95,6 +97,13 @@ export default function LLMArena() {
     startTime?: Date;
     endTime?: Date;
   } | null>(null)
+
+  // Manual mode state
+  const [waitingForUser, setWaitingForUser] = useState<boolean>(false)
+  const [nextExpectedModel, setNextExpectedModel] = useState<'A' | 'B' | null>(null)
+  const [pauseReason, setPauseReason] = useState<string>("")
+  const [judgeAnalyzing, setJudgeAnalyzing] = useState<boolean>(false)
+  const [nextPrompt, setNextPrompt] = useState<string>("")
 
   // Browser safety: Auto-stop experiment when user closes browser/tab
   useEffect(() => {
@@ -151,6 +160,13 @@ export default function LLMArena() {
         setStreamingMessages(new Map()) // Clear streaming messages
         setHasCompletedExperiment(true) // Mark as completed for download
         
+        // Reset manual mode state
+        setWaitingForUser(false)
+        setNextExpectedModel(null)
+        setPauseReason('')
+        setNextPrompt('')
+        setJudgeAnalyzing(false)
+        
         // Update last experiment data with end time
         setLastExperimentData(prev => prev ? {
           ...prev,
@@ -170,8 +186,110 @@ export default function LLMArena() {
         setExperimentStatus(`🔄 Turn ${event.data.turn}: Models are responding...`)
         break
         
+      case 'waiting_for_user':
+        console.log('Manual mode: Waiting for user input', event.data)
+        setWaitingForUser(true)
+        setNextExpectedModel(event.data.nextModel)
+        setPauseReason(event.data.reason)
+        
+        // Build the COMPLETE prompt that will actually be sent to the model
+        // Use conversation data from the event (most current) instead of potentially stale React state
+        const eventConversation = event.data.conversation || conversation
+        const eventConfig = event.data.config
+        
+        console.log('🔍 Building full context prompt for', event.data.nextModel)
+        console.log('📊 Event conversation length:', eventConversation.length)
+        console.log('📊 React state conversation length:', conversation.length)
+        console.log('🎭 Prompting mode:', promptingMode)
+        console.log('📝 Shared prompt:', sharedPrompt ? 'EXISTS' : 'NONE')
+        console.log('📝 Event config:', eventConfig ? 'EXISTS' : 'NONE')
+        
+        let fullDefaultPrompt = ""
+        
+        // 1. System Prompt (enhanced with conversation rules) - ALWAYS included
+        const baseSystemPrompt = systemPrompt 
+          ? systemPrompt.replace(/{MODEL}/g, event.data.nextModel)
+          : `You are Model ${event.data.nextModel}. Respond naturally and authentically.`
+        
+        const enhancedSystemPrompt = baseSystemPrompt + 
+          `\n\n=== CONVERSATION RULES ===
+- You are Model ${event.data.nextModel} in a conversation with Model ${event.data.nextModel === 'A' ? 'B' : 'A'}
+- Respond naturally and directly to the other model
+- Stay in character throughout the conversation
+- Do not reference turn numbers or system mechanics in your responses`
+        
+        // 2. Scenario context - ALWAYS show if available (use event config or current state)
+        let scenarioContext = ""
+        const currentSharedPrompt = eventConfig?.sharedPrompt || sharedPrompt
+        const currentPromptingMode = eventConfig?.promptingMode || promptingMode
+        const currentPromptA = eventConfig?.promptA || promptA
+        const currentPromptB = eventConfig?.promptB || promptB
+        
+        if (currentPromptingMode === 'shared' && currentSharedPrompt) {
+          scenarioContext = `\n\n=== SCENARIO ===\n${currentSharedPrompt}`
+          console.log('✅ Added shared scenario context')
+        } else if (currentPromptingMode === 'individual') {
+          const relevantPrompt = event.data.nextModel === 'A' ? currentPromptA : currentPromptB
+          if (relevantPrompt) {
+            scenarioContext = `\n\n=== YOUR SPECIFIC INSTRUCTIONS ===\n${relevantPrompt}`
+            console.log('✅ Added individual instructions for Model', event.data.nextModel)
+          }
+        }
+        
+        // 3. Full conversation history - ALWAYS show using most current data from event
+        let conversationHistory = ""
+        if (eventConversation.length > 0) {
+          conversationHistory = "\n\n=== CONVERSATION HISTORY ===\n"
+          eventConversation.forEach((msg, index) => {
+            const isCurrentModel = msg.model === event.data.nextModel
+            const role = isCurrentModel ? "You previously said" : `Model ${msg.model} said`
+            conversationHistory += `\n${role}: ${msg.content}\n`
+          })
+          conversationHistory += "\n=== END HISTORY ===\n\nNow respond to continue the conversation:"
+          console.log('✅ Added conversation history with', eventConversation.length, 'messages')
+        } else {
+          // No conversation yet - this is the start
+          if (event.data.nextModel === 'A') {
+            conversationHistory = "\n\n=== CONVERSATION HISTORY ===\n(No previous messages - you are starting the conversation)\n\n=== END HISTORY ===\n\nBegin the conversation based on your scenario instructions:"
+          } else {
+            conversationHistory = "\n\n=== CONVERSATION HISTORY ===\n(No previous messages yet)\n\n=== END HISTORY ===\n\nBegin your response:"
+          }
+          console.log('✅ Added empty conversation history for', event.data.reason)
+        }
+        
+        fullDefaultPrompt = enhancedSystemPrompt + scenarioContext + conversationHistory
+        console.log('🎯 Final prompt length:', fullDefaultPrompt.length, 'characters')
+        console.log('🎯 Final prompt preview:', fullDefaultPrompt.substring(0, 300) + '...')
+        setNextPrompt(fullDefaultPrompt)
+        
+        // Update status based on pause reason
+        if (event.data.reason === 'turn_completed') {
+          setExperimentStatus(`⏸️ Manual mode: Turn ${event.data.currentTurn} completed. Ready for next turn?`)
+        } else if (event.data.reason === 'model_completed') {
+          setExperimentStatus(`⏸️ Manual mode: Waiting for input to send to Model ${event.data.nextModel}`)
+        } else if (event.data.reason === 'turn_start') {
+          setExperimentStatus(`🆕 Manual mode: Starting Turn ${event.data.currentTurn} with Model ${event.data.nextModel}`)
+        }
+        break
+        
       case 'turn_completed':
         setExperimentStatus(`✨ Turn ${event.data.turn} completed! ${event.data.totalMessages} messages total.`)
+        break
+        
+      case 'judge_evaluation_started':
+        console.log('🔍 Judge evaluation started for turn', event.data.turn)
+        setJudgeAnalyzing(true)
+        setExperimentStatus(`🧠 Judge analyzing Turn ${event.data.turn}...`)
+        break
+        
+      case 'judge_evaluation_completed':
+        console.log('✅ Judge evaluation completed for turn', event.data.turn)
+        setJudgeAnalyzing(false)
+        if (event.data.error) {
+          setExperimentStatus(`❌ Judge evaluation failed: ${event.data.error}`)
+        } else {
+          setExperimentStatus(`✅ Turn ${event.data.turn} analysis complete!`)
+        }
         break
         
       case 'experiment_error':
@@ -564,6 +682,8 @@ export default function LLMArena() {
     const experimentConfig = {
       scenario: "basic",
       description: "LLM Arena Experiment",
+      experimentMode, // NEW: Manual or automatic mode
+      systemPrompt: experimentMode === "manual" && systemPrompt ? systemPrompt : undefined, // NEW: Custom system prompt
       modelA,
       modelB,
       maxTurns,
@@ -628,6 +748,9 @@ export default function LLMArena() {
         const result = await response.json()
         setIsExperimentRunning(false)
         setHasCompletedExperiment(true)
+        setWaitingForUser(false) // Clear manual mode state
+        setNextExpectedModel(null)
+        setPauseReason("")
         
         // Update last experiment data with end time
         setLastExperimentData(prev => prev ? {
@@ -653,6 +776,104 @@ export default function LLMArena() {
       console.error('Error stopping experiment:', error);
       setExperimentError('Error stopping experiment')
     }
+  }
+
+  // Manual mode control functions
+  const handleManualContinue = async (customPrompt?: string) => {
+    try {
+      setWaitingForUser(false)
+      setExperimentStatus("🔄 Continuing experiment...")
+      
+      const response = await fetch('/api/experiment/manual-continue', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          customPrompt: customPrompt || nextPrompt || undefined,
+          targetModel: nextExpectedModel
+        }),
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Manual continue failed: ${response.statusText}`)
+      }
+      
+      console.log('Manual continue successful')
+    } catch (error) {
+      console.error('Error in manual continue:', error)
+      setExperimentError('Failed to continue experiment')
+      setWaitingForUser(true) // Return to waiting state
+    }
+  }
+
+  const handleStartNextTurn = async () => {
+    try {
+      setWaitingForUser(false)
+      setExperimentStatus("🔄 Starting next turn...")
+      
+      const response = await fetch('/api/experiment/next-turn', {
+        method: 'POST',
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Start next turn failed: ${response.statusText}`)
+      }
+      
+      console.log('Next turn started successfully')
+    } catch (error) {
+      console.error('Error starting next turn:', error)
+      setExperimentError('Failed to start next turn')
+      setWaitingForUser(true) // Return to waiting state
+    }
+  }
+
+  const handleUseDefaultPrompt = () => {
+    // Regenerate full default prompt with complete context (EXACT same logic as waiting_for_user event)
+    let fullDefaultPrompt = ""
+    
+    if (nextExpectedModel) {
+      // 1. System Prompt (enhanced with conversation rules) - ALWAYS included
+      const baseSystemPrompt = systemPrompt 
+        ? systemPrompt.replace(/{MODEL}/g, nextExpectedModel)
+        : `You are Model ${nextExpectedModel}. Respond naturally and authentically.`
+      
+      const enhancedSystemPrompt = baseSystemPrompt + 
+        `\n\n=== CONVERSATION RULES ===
+- You are Model ${nextExpectedModel} in a conversation with Model ${nextExpectedModel === 'A' ? 'B' : 'A'}
+- Respond naturally and directly to the other model
+- Stay in character throughout the conversation
+- Do not reference turn numbers or system mechanics in your responses`
+      
+      // 2. Scenario context - ALWAYS show if available (shared or individual)
+      let scenarioContext = ""
+      if (promptingMode === 'shared' && sharedPrompt) {
+        scenarioContext = `\n\n=== SCENARIO ===\n${sharedPrompt}`
+      } else if (promptingMode === 'individual') {
+        const relevantPrompt = nextExpectedModel === 'A' ? promptA : promptB
+        if (relevantPrompt) {
+          scenarioContext = `\n\n=== YOUR SPECIFIC INSTRUCTIONS ===\n${relevantPrompt}`
+        }
+      }
+      
+      // 3. Full conversation history - ALWAYS show if exists (no matter the reason)
+      let conversationHistory = ""
+      if (conversation.length > 0) {
+        conversationHistory = "\n\n=== CONVERSATION HISTORY ===\n"
+        conversation.forEach((msg, index) => {
+          const isCurrentModel = msg.model === nextExpectedModel
+          const role = isCurrentModel ? "You previously said" : `Model ${msg.model} said`
+          conversationHistory += `\n${role}: ${msg.content}\n`
+        })
+        conversationHistory += "\n=== END HISTORY ===\n\nNow respond to continue the conversation:"
+      } else if (pauseReason === 'turn_start') {
+        conversationHistory = "\n\n=== CONVERSATION HISTORY ===\n(No previous messages - you are starting the conversation)\n\n=== END HISTORY ===\n\nBegin the conversation based on your instructions:"
+      }
+      
+      fullDefaultPrompt = enhancedSystemPrompt + scenarioContext + conversationHistory
+    }
+    
+    setNextPrompt(fullDefaultPrompt)
   }
 
   // Fallback status check for when WebSocket fails
@@ -733,6 +954,16 @@ export default function LLMArena() {
           {/* Center Column - Experiment Setup & Conversation */}
           <div className="lg:col-span-4 space-y-6">
             <ExperimentSetup
+              experimentMode={experimentMode}
+              onExperimentModeChange={(mode) => {
+                setExperimentMode(mode)
+                // Auto-enable No Limit for manual mode
+                if (mode === 'manual') {
+                  setMaxTurns(-1)
+                }
+              }}
+              systemPrompt={systemPrompt}
+              onSystemPromptChange={setSystemPrompt}
               promptingMode={promptingMode}
               onPromptingModeChange={setPromptingMode}
               sharedPrompt={sharedPrompt}
@@ -760,6 +991,16 @@ export default function LLMArena() {
               streamingMessages={Array.from(streamingMessages.values())}
               isWebSocketConnected={isConnected}
               webSocketError={connectionError}
+              experimentMode={experimentMode}
+              waitingForUser={waitingForUser}
+              nextExpectedModel={nextExpectedModel}
+              pauseReason={pauseReason}
+              nextPrompt={nextPrompt}
+              judgeAnalyzing={judgeAnalyzing}
+              onNextPromptChange={setNextPrompt}
+              onManualContinue={handleManualContinue}
+              onStartNextTurn={handleStartNextTurn}
+              onUseDefaultPrompt={handleUseDefaultPrompt}
             />
           </div>
 

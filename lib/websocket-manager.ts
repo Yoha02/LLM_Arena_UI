@@ -2,7 +2,7 @@ import { Server } from 'socket.io';
 import { createServer } from 'http';
 
 export interface ExperimentEvent {
-  type: 'experiment_started' | 'experiment_stopped' | 'turn_started' | 'turn_completed' | 'message_streaming' | 'message_completed' | 'experiment_error';
+  type: 'experiment_started' | 'experiment_stopped' | 'turn_started' | 'turn_completed' | 'message_streaming' | 'message_completed' | 'experiment_error' | 'waiting_for_user' | 'judge_evaluation_started' | 'judge_evaluation_completed';
   data: any;
   timestamp: Date;
 }

@@ -1,6 +1,8 @@
 // Core experiment types
 export interface ExperimentConfig {
+  experimentMode: "automatic" | "manual" // NEW: Experiment control mode
   promptingMode: "shared" | "individual"
+  systemPrompt?: string // NEW: Custom system prompt for manual mode
   sharedPrompt?: string
   promptA?: string
   promptB?: string
@@ -50,6 +52,9 @@ export interface ExperimentState {
   startTime?: Date
   endTime?: Date
   error?: string // Store error messages for UI display
+  waitingForUser?: boolean // NEW: Manual mode pause state
+  nextExpectedModel?: 'A' | 'B' // NEW: Which model should respond next
+  pauseReason?: string // NEW: Why we're paused
 }
 
 // OpenRouter specific types
