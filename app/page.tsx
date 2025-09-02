@@ -240,7 +240,7 @@ export default function LLMArena() {
         let conversationHistory = ""
         if (eventConversation.length > 0) {
           conversationHistory = "\n\n=== CONVERSATION HISTORY ===\n"
-          eventConversation.forEach((msg, index) => {
+          eventConversation.forEach((msg: ChatMessage, index: number) => {
             const isCurrentModel = msg.model === event.data.nextModel
             const role = isCurrentModel ? "You previously said" : `Model ${msg.model} said`
             conversationHistory += `\n${role}: ${msg.content}\n`
@@ -575,6 +575,7 @@ export default function LLMArena() {
 
     try {
       const config: ExperimentConfig = {
+        experimentMode,
         promptingMode,
         sharedPrompt: promptingMode === 'shared' ? sharedPrompt : undefined,
         promptA: promptingMode === 'individual' ? promptA : undefined,
@@ -608,6 +609,7 @@ export default function LLMArena() {
 
     try {
       const config: ExperimentConfig = {
+        experimentMode,
         promptingMode,
         sharedPrompt: promptingMode === 'shared' ? sharedPrompt : undefined,
         promptA: promptingMode === 'individual' ? promptA : undefined,
@@ -651,6 +653,7 @@ export default function LLMArena() {
     
     // Store experiment data for report generation
     const reportConfig: ExperimentConfig = {
+      experimentMode,
       promptingMode,
       sharedPrompt: promptingMode === 'shared' ? sharedPrompt : undefined,
       promptA: promptingMode === 'individual' ? promptA : undefined,
@@ -860,7 +863,7 @@ export default function LLMArena() {
       let conversationHistory = ""
       if (conversation.length > 0) {
         conversationHistory = "\n\n=== CONVERSATION HISTORY ===\n"
-        conversation.forEach((msg, index) => {
+                  conversation.forEach((msg: ChatMessage, index: number) => {
           const isCurrentModel = msg.model === nextExpectedModel
           const role = isCurrentModel ? "You previously said" : `Model ${msg.model} said`
           conversationHistory += `\n${role}: ${msg.content}\n`

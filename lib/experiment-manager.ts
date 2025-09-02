@@ -170,7 +170,7 @@ export class ExperimentManager {
         
         // Reset manual mode state for TTL timeout
         this.state.waitingForUser = false;
-        this.state.nextExpectedModel = null;
+        this.state.nextExpectedModel = undefined;
         this.state.pauseReason = '';
         this.manualStopRequested = false;
         
@@ -292,7 +292,7 @@ async stopExperiment(): Promise<void> {
     this.state.isRunning = false;
     this.state.endTime = new Date();
     this.state.waitingForUser = false;
-    this.state.nextExpectedModel = null;
+    this.state.nextExpectedModel = undefined;
     this.state.pauseReason = '';
     this.isProcessingTurn = false; // Also reset processing flag
     this.manualStopRequested = false; // Reset flag after cleanup
@@ -402,7 +402,7 @@ async stopExperiment(): Promise<void> {
     
     try {
       // 🎮 MANUAL MODE: Pause before Model A for user to edit prompt
-      if (this.config.experimentMode === 'manual') {
+      if (this.config && this.config.experimentMode === 'manual') {
         console.log('🎮 Manual mode: Pausing before Model A for user to edit prompt');
         this.state.waitingForUser = true;
         this.state.nextExpectedModel = 'A';
@@ -485,7 +485,7 @@ async stopExperiment(): Promise<void> {
       console.log('Added Model A message to conversation. New length:', this.state.conversation.length);
       
       // 🎮 MANUAL MODE: Pause after Model A for user to edit prompt for Model B
-      if (this.config.experimentMode === 'manual') {
+      if (this.config && this.config.experimentMode === 'manual') {
         console.log('🎮 Manual mode: Pausing after Model A for user to edit prompt for Model B');
         this.state.waitingForUser = true;
         this.state.nextExpectedModel = 'B';
@@ -586,9 +586,9 @@ async stopExperiment(): Promise<void> {
       // Create a promise with timeout to prevent hanging
       const judgeEvaluationPromise = async () => {
         const originalPrompts = {
-          shared: this.config.promptingMode === 'shared' ? this.config.sharedPrompt : undefined,
-          promptA: this.config.promptingMode === 'individual' ? this.config.promptA : undefined,
-          promptB: this.config.promptingMode === 'individual' ? this.config.promptB : undefined
+          shared: this.config?.promptingMode === 'shared' ? this.config?.sharedPrompt : undefined,
+          promptA: this.config?.promptingMode === 'individual' ? this.config?.promptA : undefined,
+          promptB: this.config?.promptingMode === 'individual' ? this.config?.promptB : undefined
         };
 
         // Remove current turn messages from history to avoid duplication in judge analysis
@@ -686,7 +686,7 @@ async stopExperiment(): Promise<void> {
       }
       
       // 🎮 MANUAL MODE: Pause after Model B for user to decide on next turn
-      if (this.config.experimentMode === 'manual') {
+      if (this.config && this.config.experimentMode === 'manual') {
         console.log('🎮 Manual mode: Pausing after Model B for user to decide on next turn');
         this.state.waitingForUser = true;
         this.state.nextExpectedModel = 'A';
@@ -789,7 +789,7 @@ async stopExperiment(): Promise<void> {
         this.isProcessingTurn = false;
       } else {
         // Handle manual vs automatic mode for turn progression
-        if (this.config.experimentMode === 'manual') {
+        if (this.config && this.config.experimentMode === 'manual') {
           console.log('🎮 Manual mode: Pausing for user input after turn completion');
           this.state.waitingForUser = true;
           this.state.nextExpectedModel = 'A'; // Next turn will start with Model A
@@ -1547,9 +1547,9 @@ async stopExperiment(): Promise<void> {
       try {
         console.log('🔍 Running judge evaluation for completed manual turn', this.state.currentTurn);
         const originalPrompts = {
-          shared: this.config.promptingMode === 'shared' ? this.config.sharedPrompt : undefined,
-          promptA: this.config.promptingMode === 'individual' ? this.config.promptA : undefined,
-          promptB: this.config.promptingMode === 'individual' ? this.config.promptB : undefined
+          shared: this.config?.promptingMode === 'shared' ? this.config?.sharedPrompt : undefined,
+          promptA: this.config?.promptingMode === 'individual' ? this.config?.promptA : undefined,
+          promptB: this.config?.promptingMode === 'individual' ? this.config?.promptB : undefined
         };
 
         const messageA = currentTurnMessages.find(msg => msg.model === 'A');
