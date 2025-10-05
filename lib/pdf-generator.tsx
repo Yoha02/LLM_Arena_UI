@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
   barHappiness: { backgroundColor: '#3b82f6' },
   barAnger: { backgroundColor: '#ef4444' },
   barFear: { backgroundColor: '#f59e0b' },
-  barSadness: { backgroundColor: '#8b5cf6' },
+  barSadness: { backgroundColor: '#0891b2' },
   barHopelessness: { backgroundColor: '#6b7280' },
   barExcitement: { backgroundColor: '#10b981' },
   barDeception: { backgroundColor: '#9b59b6' },

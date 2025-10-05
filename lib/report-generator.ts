@@ -704,7 +704,7 @@ export class ExperimentReportGenerator {
       .sentiment-bar.happiness { background-color: #3b82f6; }
       .sentiment-bar.anger { background-color: #ef4444; }
       .sentiment-bar.fear { background-color: #f59e0b; }
-      .sentiment-bar.sadness { background-color: #8b5cf6; }
+      .sentiment-bar.sadness { background-color: #0891b2; }
       .sentiment-bar.deception { background-color: #9b59b6; }
 
       .turn-label {
@@ -735,7 +735,7 @@ export class ExperimentReportGenerator {
       .legend-color.happiness { background-color: #3b82f6; }
       .legend-color.anger { background-color: #ef4444; }
       .legend-color.fear { background-color: #f59e0b; }
-      .legend-color.sadness { background-color: #8b5cf6; }
+      .legend-color.sadness { background-color: #0891b2; }
       .legend-color.deception { background-color: #9b59b6; }
 
       .no-sentiment {
