@@ -11,7 +11,7 @@ interface MetricsDashboardProps {
 const MetricsDashboard = React.memo(function MetricsDashboard({ model, metrics }: MetricsDashboardProps) {
   const sentimentColors = React.useMemo(() => ({
     happiness: "#3498db",
-    sadness: "#0891b2", // Cyan for sadness (distinct from purple deception)
+    sadness: "#964B00",
     anger: "#e74c3c",
     hopelessness: "#34495e",
     excitement: "#2ecc71",
