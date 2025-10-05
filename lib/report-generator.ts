@@ -245,6 +245,7 @@ export class ExperimentReportGenerator {
         <div class="sentiment-bar anger" style="height: ${data.anger * 100}px" title="Anger: ${(data.anger * 100).toFixed(1)}%"></div>
         <div class="sentiment-bar fear" style="height: ${data.fear * 100}px" title="Fear: ${(data.fear * 100).toFixed(1)}%"></div>
         <div class="sentiment-bar sadness" style="height: ${data.sadness * 100}px" title="Sadness: ${(data.sadness * 100).toFixed(1)}%"></div>
+        <div class="sentiment-bar deception" style="height: ${data.deception * 100}px" title="Deception: ${(data.deception * 100).toFixed(1)}%"></div>
         <div class="turn-label">${turn}</div>
       </div>`;
     }).join('');
@@ -260,6 +261,7 @@ export class ExperimentReportGenerator {
             <span class="legend-item"><span class="legend-color anger"></span> Anger</span>
             <span class="legend-item"><span class="legend-color fear"></span> Fear</span>
             <span class="legend-item"><span class="legend-color sadness"></span> Sadness</span>
+            <span class="legend-item"><span class="legend-color deception"></span> Deception</span>
         </div>
     </div>`;
   }
@@ -703,6 +705,7 @@ export class ExperimentReportGenerator {
       .sentiment-bar.anger { background-color: #ef4444; }
       .sentiment-bar.fear { background-color: #f59e0b; }
       .sentiment-bar.sadness { background-color: #8b5cf6; }
+      .sentiment-bar.deception { background-color: #9b59b6; }
 
       .turn-label {
         font-size: 0.7rem;
@@ -733,6 +736,7 @@ export class ExperimentReportGenerator {
       .legend-color.anger { background-color: #ef4444; }
       .legend-color.fear { background-color: #f59e0b; }
       .legend-color.sadness { background-color: #8b5cf6; }
+      .legend-color.deception { background-color: #9b59b6; }
 
       .no-sentiment {
         color: #9ca3af;

@@ -238,6 +238,7 @@ const styles = StyleSheet.create({
   barSadness: { backgroundColor: '#8b5cf6' },
   barHopelessness: { backgroundColor: '#6b7280' },
   barExcitement: { backgroundColor: '#10b981' },
+  barDeception: { backgroundColor: '#9b59b6' },
   chartLegend: {
     flexDirection: 'row',
     gap: 15,
@@ -443,6 +444,7 @@ const PDFSentimentChart: React.FC<{ sentimentHistory: SentimentData[], model: st
                     <View style={[styles.sentimentBar, styles.barSadness, { height: scaleValue(data.sadness || 0) }]} />
                     <View style={[styles.sentimentBar, styles.barHopelessness, { height: scaleValue(data.hopelessness || 0) }]} />
                     <View style={[styles.sentimentBar, styles.barExcitement, { height: scaleValue(data.excitement || 0) }]} />
+                    <View style={[styles.sentimentBar, styles.barDeception, { height: scaleValue(data.deception || 0) }]} />
                   </View>
                   <Text style={{ fontSize: 8, color: '#6b7280', marginTop: 5 }}>{actualTurnNumber}</Text>
                 </View>
@@ -475,6 +477,10 @@ const PDFSentimentChart: React.FC<{ sentimentHistory: SentimentData[], model: st
               <View style={styles.legendItem}>
                 <View style={[styles.legendColor, styles.barExcitement]} />
                 <Text>Excitement</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendColor, styles.barDeception]} />
+                <Text>Deception</Text>
               </View>
             </View>
           )}

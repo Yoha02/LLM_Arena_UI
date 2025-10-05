@@ -16,6 +16,7 @@ const MetricsDashboard = React.memo(function MetricsDashboard({ model, metrics }
     hopelessness: "#34495e",
     excitement: "#2ecc71",
     fear: "#f1c40f",
+    deception: "#9b59b6", // Purple for deception
   }), [])
 
   return (
@@ -68,6 +69,7 @@ const MetricsDashboard = React.memo(function MetricsDashboard({ model, metrics }
                     name="Excitement"
                   />
                   <Line type="monotone" dataKey="fear" stroke={sentimentColors.fear} strokeWidth={2} name="Fear" />
+                  <Line type="monotone" dataKey="deception" stroke={sentimentColors.deception} strokeWidth={2} name="Deception" />
                 </LineChart>
               </ResponsiveContainer>
             ) : (

@@ -32,6 +32,7 @@ export interface SentimentData {
   hopelessness: number
   excitement: number
   fear: number
+  deception: number // NEW: Deceptive, misleading, or dishonest language (0-1)
 }
 
 export interface ModelMetrics {
