@@ -9,6 +9,7 @@ import { OpenRouterAPI } from './openrouter';
 import { thinkingExtractor } from './thinking-extractor';
 import WebSocketManager, { ExperimentEvent, StreamingMessage } from './websocket-manager';
 import { JudgeEvaluator } from './judge-evaluator';
+import { ContentFilter, FilterResult } from './content-filter';
 
 // Global singleton registry that persists across module contexts
 declare global {
@@ -26,6 +27,7 @@ export class ExperimentManager {
   private wsManager: WebSocketManager;
   private experimentId: string = 'default';
   private judgeEvaluator: JudgeEvaluator;
+  private contentFilter: ContentFilter; // Content filtering for model responses
   private manualStopRequested: boolean = false; // NEW: Flag for manual stops
   private instanceId: string; // NEW: Track instance identity
 
@@ -67,6 +69,10 @@ export class ExperimentManager {
     
     // Initialize judge evaluator
     this.judgeEvaluator = new JudgeEvaluator();
+    
+    // Initialize content filter
+    this.contentFilter = new ContentFilter();
+    console.log('✅ ContentFilter initialized');
   }
 
   /**
@@ -131,6 +137,10 @@ export class ExperimentManager {
     
     // Configure judge evaluator with API key (use same as Model A)
     this.judgeEvaluator.updateApiKey(config.apiKeyA);
+    
+    // Configure content filter with same API key
+    this.contentFilter.updateApiKey(config.apiKeyA);
+    console.log('✅ Judge and ContentFilter configured with API keys');
 
     // Reset state
     this.state = {
@@ -1239,23 +1249,70 @@ async stopExperiment(): Promise<void> {
         console.log(`✅ Using streaming thinking (${finalThinking.length} chars) for Model ${model}`);
       }
 
-      // Create chat message with preserved thinking
+      // 🔍 NEW: Filter conversational response
+      console.log(`🔍 Starting content filtering for Model ${model}`);
+      const conversationContext = this.buildConversationSummary(model);
+      
+      let filterResult: FilterResult;
+      try {
+        filterResult = await this.contentFilter.filterConversationalResponse(
+          modelName,
+          responseContent, // Full original output
+          conversationContext
+        );
+        
+        console.log(`✅ Content filtering completed for Model ${model}:`, {
+          originalLength: responseContent.length,
+          filteredLength: filterResult.filteredContent.length,
+          sectionsRemoved: filterResult.removedSections.length,
+          confidence: filterResult.confidence
+        });
+        
+        // Warn if filtering removed nothing (might be unexpected)
+        if (filterResult.removedSections.length === 0 && responseContent.length > 200) {
+          console.log(`ℹ️ No sections removed for Model ${model} - response may be pure conversation`);
+        }
+        
+      } catch (error) {
+        console.error(`❌ Content filtering error for Model ${model}:`, error);
+        // Use fallback result
+        filterResult = {
+          filteredContent: responseContent,
+          removedSections: [],
+          confidence: 0.0,
+          reasoning: `Filtering failed - using original: ${error}`
+        };
+      }
+
+      // Create chat message with BOTH original and filtered content
       const chatMessage: ChatMessage = {
         id: `${model}-${this.state.currentTurn + 1}`,
         model,
         modelName,
         turn: this.state.currentTurn + 1,
-        content: responseContent,
+        content: filterResult.filteredContent,        // Filtered (what other model sees)
+        originalContent: responseContent,             // Full original (for UI & reports)
         thinking: finalThinking || undefined, // Don't use fallback messages
         timestamp: new Date(),
-        tokensUsed
+        tokensUsed,
+        
+        // Filter metadata for transparency
+        filterMetadata: {
+          wasFiltered: filterResult.removedSections.length > 0,
+          removedSections: filterResult.removedSections,
+          filterConfidence: filterResult.confidence,
+          filterReasoning: filterResult.reasoning
+        }
       };
 
       console.log(`💬 Final ChatMessage for Model ${model}:`, {
         id: chatMessage.id,
+        originalLength: chatMessage.originalContent?.length || 0,
+        filteredLength: chatMessage.content.length,
         hasThinking: !!chatMessage.thinking,
         thinkingLength: chatMessage.thinking?.length || 0,
-        thinkingSource: streamingMessage.thinking ? 'streaming-preserved' : 'extraction-fallback'
+        thinkingSource: streamingMessage.thinking ? 'streaming-preserved' : 'extraction-fallback',
+        wasFiltered: chatMessage.filterMetadata?.wasFiltered
       });
 
       // Update metrics
@@ -1330,6 +1387,24 @@ async stopExperiment(): Promise<void> {
   }
 
   /**
+   * Build a brief summary of recent conversation for filter context
+   */
+  private buildConversationSummary(model: 'A' | 'B'): string {
+    const recentMessages = this.state.conversation.slice(-3); // Last 3 messages
+    
+    if (recentMessages.length === 0) {
+      return "This is the first message in the conversation. The model should introduce itself and begin the scenario.";
+    }
+    
+    const summary = recentMessages.map(msg => {
+      const preview = msg.content.substring(0, 200);
+      return `Model ${msg.model}: ${preview}${msg.content.length > 200 ? '...' : ''}`;
+    }).join('\n\n');
+    
+    return `Recent conversation (last ${recentMessages.length} messages):\n\n${summary}`;
+  }
+
+  /**
    * Build conversation history for a specific model
    */
   private buildConversationHistory(model: 'A' | 'B'): Array<{role: string, content: string}> {
@@ -1352,8 +1427,8 @@ async stopExperiment(): Promise<void> {
       });
     }
 
-    // ✅ SIMPLIFIED conversation history - just show the dialogue chronologically
-    // This reduces confusion about roles and turn structure
+    // 🔍 CRITICAL: Use FILTERED content for conversation history
+    // This ensures models only see filtered responses, not original reasoning
     for (let i = 0; i < this.state.conversation.length; i++) {
       const message = this.state.conversation[i];
       const isCurrentModel = message.model === model;
@@ -1362,18 +1437,18 @@ async stopExperiment(): Promise<void> {
         // Own previous messages as 'assistant'
         history.push({
           role: 'assistant',
-          content: message.content
+          content: message.content  // ✅ Already filtered
         });
       } else {
-        // Other model's messages as 'user' (simple, clear format)
+        // Other model's messages as 'user'
         history.push({
           role: 'user',
-          content: message.content
+          content: message.content  // ✅ Filtered (no reasoning exposed)
         });
       }
     }
 
-    console.log(`📝 Built conversation history for Model ${model}: ${history.length} messages (${history.length - 1} conversation + 1 system)`);
+    console.log(`📝 Built conversation history for Model ${model}: ${history.length} messages (using FILTERED content)`);
 
     return history;
   }

@@ -157,6 +157,42 @@ const styles = StyleSheet.create({
   messageContent: {
     padding: 15,
   },
+  filteredSection: {
+    backgroundColor: '#fffbeb',
+    borderTop: '1px solid #fcd34d',
+    padding: 12,
+  },
+  filteredHeader: {
+    color: '#92400e',
+    fontSize: 11,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  filteredMeta: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 8,
+    flexWrap: 'wrap',
+  },
+  filteredBadge: {
+    backgroundColor: '#fef3c7',
+    color: '#92400e',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    fontSize: 8,
+  },
+  filteredContent: {
+    backgroundColor: '#ffffff',
+    padding: 10,
+    borderRadius: 4,
+    border: '1px solid #fde68a',
+    fontSize: 10,
+    fontFamily: 'Courier',
+  },
   messageTokens: {
     backgroundColor: '#f8fafc',
     color: '#6b7280',
@@ -353,6 +389,9 @@ const PDFMessage: React.FC<{ message: ChatMessage }> = ({ message }) => {
   const isModelA = message.model === 'A';
   const messageStyle = [styles.message, isModelA ? styles.messageA : styles.messageB];
   const badgeStyle = [styles.messageBadge, isModelA ? styles.modelBadgeA : styles.modelBadgeB];
+  
+  // Use original content for display (full transparency)
+  const displayContent = message.originalContent || message.content;
 
   return (
     <View style={messageStyle}>
@@ -370,8 +409,30 @@ const PDFMessage: React.FC<{ message: ChatMessage }> = ({ message }) => {
       )}
       
       <View style={styles.messageContent}>
-        <Text>{message.content}</Text>
+        <Text>{displayContent}</Text>
       </View>
+      
+      {message.filterMetadata?.wasFiltered && (
+        <View style={styles.filteredSection}>
+          <Text style={styles.filteredHeader}>
+            Filtered Message (sent to other model)
+          </Text>
+          <View style={styles.filteredMeta}>
+            <Text style={styles.filteredBadge}>
+              {message.filterMetadata.removedSections.length} section(s) filtered
+            </Text>
+            <Text style={styles.filteredBadge}>
+              {(message.filterMetadata.filterConfidence * 100).toFixed(0)}% confidence
+            </Text>
+            {message.filterMetadata.removedSections.length > 0 && (
+              <Text style={styles.filteredBadge}>
+                Removed: {message.filterMetadata.removedSections.join(', ')}
+              </Text>
+            )}
+          </View>
+          <Text style={styles.filteredContent}>{message.content}</Text>
+        </View>
+      )}
       
       {message.tokensUsed && (
         <Text style={styles.messageTokens}>Tokens: {message.tokensUsed}</Text>

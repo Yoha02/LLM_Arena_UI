@@ -18,9 +18,18 @@ export interface ChatMessage {
   modelName: string
   turn: number
   content: string
+  originalContent?: string     // Full original output (for UI & reports)
   thinking?: string
   timestamp: Date
   tokensUsed?: number
+  
+  // Filter transparency metadata
+  filterMetadata?: {
+    wasFiltered: boolean
+    removedSections: string[]
+    filterConfidence: number
+    filterReasoning: string
+  }
 }
 
 export interface SentimentData {
@@ -31,6 +40,7 @@ export interface SentimentData {
   hopelessness: number
   excitement: number
   fear: number
+  deception: number // Deceptive, misleading, or dishonest language (0-1)
 }
 
 export interface ModelMetrics {
@@ -192,6 +202,16 @@ export default function LLMArena() {
         setNextExpectedModel(event.data.nextModel)
         setPauseReason(event.data.reason)
         
+        // Update conversation with complete ChatMessage objects (including originalContent)
+        if (event.data.conversation && Array.isArray(event.data.conversation)) {
+          console.log('🔍 Updating conversation from waiting_for_user event')
+          const conversationWithDates = event.data.conversation.map((msg: any) => ({
+            ...msg,
+            timestamp: new Date(msg.timestamp)
+          }))
+          setConversation(conversationWithDates)
+        }
+        
         // Build the COMPLETE prompt that will actually be sent to the model
         // Use conversation data from the event (most current) instead of potentially stale React state
         const eventConversation = event.data.conversation || conversation
@@ -236,17 +256,19 @@ export default function LLMArena() {
           }
         }
         
-        // 3. Full conversation history - ALWAYS show using most current data from event
+        // 3. 🔍 CRITICAL: Full conversation history using FILTERED content
         let conversationHistory = ""
         if (eventConversation.length > 0) {
           conversationHistory = "\n\n=== CONVERSATION HISTORY ===\n"
           eventConversation.forEach((msg: ChatMessage, index: number) => {
             const isCurrentModel = msg.model === event.data.nextModel
             const role = isCurrentModel ? "You previously said" : `Model ${msg.model} said`
+            
+            // ✅ USE FILTERED CONTENT (what the model actually sees)
             conversationHistory += `\n${role}: ${msg.content}\n`
           })
           conversationHistory += "\n=== END HISTORY ===\n\nNow respond to continue the conversation:"
-          console.log('✅ Added conversation history with', eventConversation.length, 'messages')
+          console.log('✅ Added FILTERED conversation history with', eventConversation.length, 'messages')
         } else {
           // No conversation yet - this is the start
           if (event.data.nextModel === 'A') {
@@ -310,13 +332,18 @@ export default function LLMArena() {
     })
     
     if (message.isComplete) {
-      // If message is complete, add it to conversation and remove from streaming
+      // Message is complete - keep it in conversation temporarily
+      // Backend will send the full ChatMessage with originalContent through experiment_state
+      // which will replace this temporary message
+      console.log('✅ Streaming complete for message:', message.id, '- adding temporary message until backend sends complete data')
+      
       const chatMessage: ChatMessage = {
         id: message.id,
         model: message.model,
         modelName: message.modelName,
         turn: message.turn,
         content: message.content,
+        originalContent: message.content, // Temporary - will be replaced with correct originalContent from backend
         thinking: message.thinking,
         timestamp: new Date(),
         tokensUsed: message.tokensUsed
@@ -388,14 +415,36 @@ export default function LLMArena() {
       })
     }
     
-    // Update conversation if provided (but be careful not to override streaming updates)
+    // Update conversation if provided - ALWAYS update to get originalContent and filterMetadata
     if (state.conversation && Array.isArray(state.conversation)) {
       setConversation(prev => {
-        if (state.conversation.length !== prev.length) {
-          const conversationWithDates = state.conversation.map((msg: any) => ({
-            ...msg,
-            timestamp: new Date(msg.timestamp)
-          }))
+        // Debug: Log what we're receiving
+        console.log('🔍 Received conversation from backend:', state.conversation.map((msg: any) => ({
+          id: msg.id,
+          hasOriginalContent: !!msg.originalContent,
+          originalContentLength: msg.originalContent?.length || 0,
+          contentLength: msg.content?.length || 0,
+          hasFilterMetadata: !!msg.filterMetadata
+        })))
+        
+        const conversationWithDates = state.conversation.map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp)
+        }))
+        
+        // Always update if lengths are different OR if any message has originalContent that differs from content
+        // (this ensures we get the filtered/original split from the backend)
+        const shouldUpdate = state.conversation.length !== prev.length || 
+          state.conversation.some((msg: any, idx: number) => {
+            const prevMsg = prev[idx]
+            return !prevMsg || 
+                   msg.originalContent !== prevMsg.originalContent ||
+                   msg.content !== prevMsg.content ||
+                   !!msg.filterMetadata !== !!prevMsg.filterMetadata
+          })
+        
+        if (shouldUpdate) {
+          console.log('📝 Updating conversation from backend with complete ChatMessage data (originalContent + filterMetadata)')
           return conversationWithDates
         }
         return prev
@@ -1000,6 +1049,8 @@ export default function LLMArena() {
               pauseReason={pauseReason}
               nextPrompt={nextPrompt}
               judgeAnalyzing={judgeAnalyzing}
+              metricsA={metricsA}
+              metricsB={metricsB}
               onNextPromptChange={setNextPrompt}
               onManualContinue={handleManualContinue}
               onStartNextTurn={handleStartNextTurn}

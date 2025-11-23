@@ -18,10 +18,19 @@ export interface ChatMessage {
   model: "A" | "B"
   modelName: string
   turn: number
-  content: string
+  content: string              // Filtered conversational response (what other model sees)
+  originalContent?: string     // Full original output (for UI & reports)
   thinking?: string
   timestamp: Date
   tokensUsed?: number
+  
+  // Filter transparency metadata
+  filterMetadata?: {
+    wasFiltered: boolean       // Did filter remove anything?
+    removedSections: string[]  // What was removed (descriptions)
+    filterConfidence: number   // 0-1 confidence
+    filterReasoning: string    // Why filter made this decision
+  }
 }
 
 export interface SentimentData {

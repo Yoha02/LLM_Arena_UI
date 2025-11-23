@@ -166,6 +166,28 @@ export class ExperimentReportGenerator {
         <span class="thinking-badge">No reasoning tokens detected</span>
       </div>`;
 
+    // Use ORIGINAL content for reports (full transparency for researchers)
+    const displayContent = message.originalContent || message.content;
+
+    // Filter metadata section with expandable filtered message
+    const filterSection = message.filterMetadata?.wasFiltered ? `
+      <div class="filter-section">
+        <button class="filter-toggle" onclick="toggleFiltered('${message.id}')">
+          <span class="toggle-icon" id="filter-icon-${message.id}">▶</span> 🔍 Filtered Message (sent to other model) - ${message.filterMetadata.removedSections.length} section(s) filtered
+        </button>
+        <div class="filter-content" id="filtered-${message.id}" style="display: none;">
+          <div class="filter-meta">
+            <strong>What the other model actually saw:</strong>
+            <span class="confidence-badge">${(message.filterMetadata.filterConfidence * 100).toFixed(0)}% confidence</span>
+            ${message.filterMetadata.removedSections.length > 0 ? 
+              `<span class="removed-badge">Removed: ${message.filterMetadata.removedSections.join(', ')}</span>` : ''}
+          </div>
+          <div class="filtered-message-box">
+            <pre>${this.escapeHtml(message.content)}</pre>
+          </div>
+        </div>
+      </div>` : '';
+
     return `
     <div class="message ${modelClass}">
         <div class="message-header">
@@ -179,8 +201,10 @@ export class ExperimentReportGenerator {
         ${thinkingSection}
         
         <div class="message-content">
-            <div class="content-text">${this.formatMessageContent(message.content)}</div>
+            <div class="content-text">${this.formatMessageContent(displayContent)}</div>
         </div>
+        
+        ${filterSection}
         
         ${message.tokensUsed ? `<div class="message-tokens">Tokens: ${message.tokensUsed}</div>` : ''}
     </div>`;
@@ -564,14 +588,18 @@ export class ExperimentReportGenerator {
         gap: 8px;
         color: #6b7280;
         font-size: 0.9rem;
+        font-family: inherit;
       }
 
       .thinking-toggle:hover {
         background-color: #f9fafb;
       }
 
-      .toggle-icon {
+      .thinking-toggle .toggle-icon {
+        display: inline-block;
+        min-width: 12px;
         transition: transform 0.2s ease;
+        flex-shrink: 0;
       }
 
       .thinking-toggle.expanded .toggle-icon {
@@ -772,6 +800,105 @@ export class ExperimentReportGenerator {
         font-size: 0.9rem;
       }
 
+      /* Filter Section */
+      .filter-section {
+        margin-top: 15px;
+        border-top: 1px solid #e5e7eb;
+        padding-top: 10px;
+      }
+
+      .filter-toggle {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        border: 1px solid #f59e0b;
+        color: #92400e;
+        padding: 10px 15px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 500;
+        width: 100%;
+        text-align: left;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .filter-toggle:hover {
+        background: linear-gradient(135deg, #fde68a 0%, #fcd34d 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
+      }
+
+      .filter-toggle .toggle-icon {
+        display: inline-block;
+        min-width: 12px;
+        transition: transform 0.2s;
+        font-size: 0.8rem;
+        flex-shrink: 0;
+      }
+
+      .filter-toggle.active .toggle-icon {
+        transform: rotate(90deg);
+      }
+
+      .filter-content {
+        margin-top: 10px;
+        padding: 15px;
+        background-color: #fffbeb;
+        border: 1px solid #fcd34d;
+        border-radius: 8px;
+      }
+
+      .filter-meta {
+        margin-bottom: 10px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #fde68a;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        font-size: 0.85rem;
+      }
+
+      .filter-meta strong {
+        color: #92400e;
+      }
+
+      .confidence-badge {
+        background-color: #fef3c7;
+        color: #92400e;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: 500;
+      }
+
+      .removed-badge {
+        background-color: #fed7aa;
+        color: #9a3412;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+      }
+
+      .filtered-message-box {
+        background-color: white;
+        border: 1px solid #fde68a;
+        border-radius: 6px;
+        padding: 12px;
+      }
+
+      .filtered-message-box pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        line-height: 1.6;
+        color: #374151;
+      }
+
       /* Footer */
       .report-footer {
         text-align: center;
@@ -858,6 +985,22 @@ export class ExperimentReportGenerator {
           content.style.display = 'none';
           icon.textContent = '▶';
           toggle.classList.remove('expanded');
+        }
+      }
+
+      function toggleFiltered(messageId) {
+        const content = document.getElementById('filtered-' + messageId);
+        const icon = document.getElementById('filter-icon-' + messageId);
+        const toggle = content.previousElementSibling;
+        
+        if (content.style.display === 'none') {
+          content.style.display = 'block';
+          icon.textContent = '▼';
+          toggle.classList.add('active');
+        } else {
+          content.style.display = 'none';
+          icon.textContent = '▶';
+          toggle.classList.remove('active');
         }
       }
       
