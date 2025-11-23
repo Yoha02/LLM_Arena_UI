@@ -778,6 +778,19 @@ This ensures:
    - Stores both original and filtered versions
    - Next model receives only filtered content
 
+### **Potential Asymmetry Points**
+1. **Thinking instructions**: Added by backend, not visible in edit box  
+2. **Conversation role structure**: User sees flat text, LLM receives structured roles  
+3. **Turn timing**: Model B always sees Model A’s response before responding  
+4. **Judge evaluation**: Runs after both models respond (fair)  
+5. **System prompt**: Applied to both models equally in shared mode  
+
+### **Areas to Investigate**
+- Is the thinking instruction prompt causing bias?  
+- Should conversation structure be more explicit to user?  
+- Is there an order effect (A always first)?  
+- Are default prompts subtly favoring one model?  
+
 ### **Fairness Achieved**
 1. ✅ **Content filtering**: Prevents strategic information leakage
 2. ✅ **Judge evaluation**: Runs after both models respond (unbiased)
