@@ -72,6 +72,15 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     thinkingExtractionMethod: 'chain-of-thought'
   },
   
+  // Moonshot AI Kimi K2 Thinking (MOE 32B)
+  'kimi-k2-thinking': {
+    name: 'Moonshot AI Kimi K2 Thinking (32B MOE)',
+    openrouterName: 'moonshotai/kimi-k2-thinking',
+    maxTokens: 4096,
+    supportsNativeThinking: true,
+    thinkingExtractionMethod: 'chain-of-thought'
+  },
+  
   // Google Gemma 3 27B (Free tier)
   'gemma-3-27b': {
     name: 'Gemma 3 27B Instruct (Free)',

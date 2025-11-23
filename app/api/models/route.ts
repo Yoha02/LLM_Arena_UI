@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
       supportsNativeThinking: config.supportsNativeThinking,
       thinkingExtractionMethod: config.thinkingExtractionMethod,
       priority: key.includes('deepseek') ? 1 : 
-                key.includes('qwen') ? 2 : 
+                key.includes('qwen') || key.includes('kimi') ? 2 : 
                 key.includes('llama') ? 3 : 4
     }));
 
