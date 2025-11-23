@@ -619,6 +619,31 @@ export function ConversationLog({
                   isExperimentRunning={isExperimentRunning}
                   experimentStatus={experimentStatus}
                 />
+
+                {/* Experiment Completion Message */}
+                {!isExperimentRunning && conversation.length > 0 && (
+                  <Card className="bg-gradient-to-r from-green-50 to-blue-50 border-green-200">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-center space-x-3">
+                        <div className="flex-shrink-0">
+                          <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
+                            <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        </div>
+                        <div className="flex-1 text-center">
+                          <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                            🎉 Experiment Completed Successfully
+                          </h3>
+                          <p className="text-sm text-gray-600">
+                            The conversation has concluded. You can review the results in the metrics dashboard and download the report.
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
               </div>
             </ScrollArea>
