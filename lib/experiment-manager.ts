@@ -494,18 +494,6 @@ async stopExperiment(): Promise<void> {
       this.state.conversation.push(messageA);
       console.log('Added Model A message to conversation. New length:', this.state.conversation.length);
       
-      // 🔍 DEBUG: Log conversation state after adding Model A
-      console.log('🔍 CONVERSATION STATE after Model A:', {
-        length: this.state.conversation.length,
-        messages: this.state.conversation.map(m => ({
-          id: m.id,
-          model: m.model,
-          contentLen: m.content?.length,
-          originalLen: m.originalContent?.length,
-          contentPreview: m.content?.substring(0, 100)
-        }))
-      });
-      
       // 🎮 MANUAL MODE: Pause after Model A for user to edit prompt for Model B
       if (this.config && this.config.experimentMode === 'manual') {
         console.log('🎮 Manual mode: Pausing after Model A for user to edit prompt for Model B');
@@ -587,18 +575,6 @@ async stopExperiment(): Promise<void> {
       // ✅ Add Model B's message to conversation too
       this.state.conversation.push(messageB);
       console.log('Added Model B message to conversation. Final length:', this.state.conversation.length);
-      
-      // 🔍 DEBUG: Log conversation state after adding Model B  
-      console.log('🔍 CONVERSATION STATE after Model B:', {
-        length: this.state.conversation.length,
-        messages: this.state.conversation.map(m => ({
-          id: m.id,
-          model: m.model,
-          contentLen: m.content?.length,
-          originalLen: m.originalContent?.length,
-          contentPreview: m.content?.substring(0, 100)
-        }))
-      });
 
       this.state.currentTurn++;
       
@@ -1285,26 +1261,17 @@ async stopExperiment(): Promise<void> {
           conversationContext
         );
         
-      console.log(`✅ Content filtering completed for Model ${model}:`, {
-        originalLength: responseContent.length,
-        filteredLength: filterResult.filteredContent.length,
-        sectionsRemoved: filterResult.removedSections.length,
-        removedContentLength: filterResult.removedContent?.length || 0,
-        confidence: filterResult.confidence
-      });
-      
-      // 🧠 Use removed content as thinking if no other thinking was captured
-      if ((!finalThinking || finalThinking === "No clear chain-of-thought pattern detected" || thinkingConfidence < 0.3) 
-          && filterResult.removedContent && filterResult.removedContent.length > 50) {
-        console.log(`🧠 Using filtered-out content as thinking trace for Model ${model} (${filterResult.removedContent.length} chars)`);
-        finalThinking = filterResult.removedContent;
-        thinkingConfidence = filterResult.confidence * 0.8; // Slightly lower confidence since it's derived
-      }
+        console.log(`✅ Content filtering completed for Model ${model}:`, {
+          originalLength: responseContent.length,
+          filteredLength: filterResult.filteredContent.length,
+          sectionsRemoved: filterResult.removedSections.length,
+          confidence: filterResult.confidence
+        });
         
-      // Warn if filtering removed nothing (might be unexpected)
-      if (filterResult.removedSections.length === 0 && responseContent.length > 200) {
-        console.log(`ℹ️ No sections removed for Model ${model} - response may be pure conversation`);
-      }
+        // Warn if filtering removed nothing (might be unexpected)
+        if (filterResult.removedSections.length === 0 && responseContent.length > 200) {
+          console.log(`ℹ️ No sections removed for Model ${model} - response may be pure conversation`);
+        }
         
       } catch (error) {
         console.error(`❌ Content filtering error for Model ${model}:`, error);
@@ -1337,20 +1304,6 @@ async stopExperiment(): Promise<void> {
           filterReasoning: filterResult.reasoning
         }
       };
-
-      // 🔍 DEBUG: Log created ChatMessage to verify content separation
-      console.log(`🔍 CHATMSG CREATED for Model ${model}:`, {
-        msgId: chatMessage.id,
-        msgModel: chatMessage.model,
-        turn: chatMessage.turn,
-        contentLen: chatMessage.content?.length,
-        originalContentLen: chatMessage.originalContent?.length,
-        thinkingLen: chatMessage.thinking?.length,
-        contentPreview: chatMessage.content?.substring(0, 200),
-        originalPreview: chatMessage.originalContent?.substring(0, 200),
-        areContentsSame: chatMessage.content === chatMessage.originalContent,
-        wasFiltered: chatMessage.filterMetadata?.wasFiltered
-      });
 
       console.log(`💬 Final ChatMessage for Model ${model}:`, {
         id: chatMessage.id,
@@ -1457,18 +1410,6 @@ async stopExperiment(): Promise<void> {
   private buildConversationHistory(model: 'A' | 'B'): Array<{role: string, content: string}> {
     const history: Array<{role: string, content: string}> = [];
     
-    // 🔍 DEBUG: Log entry to buildConversationHistory
-    console.log(`🔍 BUILDING HISTORY for Model ${model}:`, {
-      conversationLength: this.state.conversation.length,
-      conversationMsgs: this.state.conversation.map(m => ({
-        id: m.id,
-        model: m.model,
-        turn: m.turn,
-        contentLen: m.content?.length,
-        originalLen: m.originalContent?.length
-      }))
-    });
-    
     // Add system prompt based on experiment configuration  
     const systemPrompt = this.getSystemPrompt(model);
     if (systemPrompt) {
@@ -1492,21 +1433,6 @@ async stopExperiment(): Promise<void> {
       const message = this.state.conversation[i];
       const isCurrentModel = message.model === model;
       
-      // 🔍 DEBUG: Log what content is being passed to conversation history
-      console.log(`🔍 HISTORY[${i}] for Model ${model}:`, {
-        msgId: message.id,
-        msgModel: message.model,
-        targetModel: model,
-        isCurrentModel,
-        contentLen: message.content?.length,
-        originalContentLen: message.originalContent?.length,
-        thinkingLen: message.thinking?.length,
-        contentPreview: message.content?.substring(0, 200),
-        originalPreview: message.originalContent?.substring(0, 200),
-        contentVsOriginalSame: message.content === message.originalContent,
-        roleAssigned: isCurrentModel ? 'assistant' : 'user'
-      });
-      
       if (isCurrentModel) {
         // Own previous messages as 'assistant'
         history.push({
@@ -1521,13 +1447,6 @@ async stopExperiment(): Promise<void> {
         });
       }
     }
-
-    // 🔍 DEBUG: Log completed conversation history
-    console.log(`🔍 HISTORY BUILT for Model ${model}:`, {
-      historyLength: history.length,
-      historyRoles: history.map(h => h.role),
-      historyContentLens: history.map(h => h.content?.length)
-    });
 
     console.log(`📝 Built conversation history for Model ${model}: ${history.length} messages (using FILTERED content)`);
 
