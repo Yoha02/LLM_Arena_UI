@@ -3,6 +3,7 @@ import { OpenRouterAPI } from './openrouter';
 export interface FilterResult {
   filteredContent: string      // The conversational response only
   removedSections: string[]    // Descriptions of what was removed
+  removedContent: string       // The actual removed content (for thinking trace)
   confidence: number            // 0-1 confidence in the filtering
   reasoning: string             // Why the filter made this decision
 }
@@ -54,9 +55,13 @@ export class ContentFilter {
         confidence: result.confidence
       });
       
+      // Calculate removed content by diffing original vs filtered
+      const removedContent = this.extractRemovedContent(rawOutput, result.conversationalResponse);
+      
       return {
         filteredContent: result.conversationalResponse,
         removedSections: result.removedSections || [],
+        removedContent: removedContent,
         confidence: result.confidence || 0.0,
         reasoning: result.reasoning || 'No reasoning provided'
       };
@@ -68,6 +73,7 @@ export class ContentFilter {
       return {
         filteredContent: rawOutput,
         removedSections: [],
+        removedContent: '',
         confidence: 0.0,
         reasoning: `Filter failed: ${error instanceof Error ? error.message : 'Unknown error'} - using original output`
       };
@@ -187,5 +193,71 @@ If there is NO conversational content (entire output is reasoning), respond:
       throw new Error(`Invalid JSON from filter: ${error}`);
     }
   }
+
+  /**
+   * Extract the content that was removed during filtering
+   * This can be used as the thinking trace when no native thinking is available
+   */
+  private extractRemovedContent(original: string, filtered: string): string {
+    if (!original || !filtered || original === filtered) {
+      return '';
+    }
+
+    // Normalize whitespace for comparison
+    const normalizedOriginal = original.trim();
+    const normalizedFiltered = filtered.trim();
+
+    // If filtered is empty, the entire original was reasoning
+    if (!normalizedFiltered) {
+      return normalizedOriginal;
+    }
+
+    // Find the filtered content within the original and extract what's not included
+    // This handles cases where the filtered content is a subset of the original
+    
+    // Try to find the filtered content in the original
+    const filteredIndex = normalizedOriginal.indexOf(normalizedFiltered);
+    
+    if (filteredIndex !== -1) {
+      // Extract content before and after the filtered section
+      const beforeContent = normalizedOriginal.substring(0, filteredIndex).trim();
+      const afterContent = normalizedOriginal.substring(filteredIndex + normalizedFiltered.length).trim();
+      
+      const removed = [beforeContent, afterContent].filter(s => s.length > 0).join('\n\n---\n\n');
+      return removed;
+    }
+
+    // If we can't find exact match, try a more sophisticated diff
+    // Split into paragraphs and find which ones were removed
+    const originalParagraphs = normalizedOriginal.split(/\n\n+/);
+    const filteredParagraphs = normalizedFiltered.split(/\n\n+/);
+    
+    const removedParagraphs: string[] = [];
+    
+    for (const para of originalParagraphs) {
+      const trimmedPara = para.trim();
+      if (trimmedPara.length === 0) continue;
+      
+      // Check if this paragraph exists in the filtered content
+      const existsInFiltered = filteredParagraphs.some(fp => {
+        const trimmedFp = fp.trim();
+        // Check for exact match or substantial overlap
+        return trimmedFp === trimmedPara || 
+               trimmedFp.includes(trimmedPara) || 
+               trimmedPara.includes(trimmedFp);
+      });
+      
+      if (!existsInFiltered) {
+        removedParagraphs.push(trimmedPara);
+      }
+    }
+    
+    return removedParagraphs.join('\n\n');
+  }
 }
+
+
+
+
+
 
