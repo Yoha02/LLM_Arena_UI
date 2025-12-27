@@ -36,13 +36,13 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     thinkingExtractionMethod: 'chain-of-thought'
   },
   
-  // DeepSeek V3.2 (333B - Native thinking)
+  // DeepSeek V3.2 (333B - Chain-of-thought extraction)
   'deepseek-v3.2': {
     name: 'DeepSeek V3.2 (333B)',
     openrouterName: 'deepseek/deepseek-v3.2',
     maxTokens: 8192,
-    supportsNativeThinking: true,
-    thinkingExtractionMethod: 'native'
+    supportsNativeThinking: false,
+    thinkingExtractionMethod: 'chain-of-thought'
   },
   
   // Priority 2: Qwen3 235B (Chain-of-thought)
