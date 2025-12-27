@@ -36,6 +36,15 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     thinkingExtractionMethod: 'chain-of-thought'
   },
   
+  // DeepSeek V3.2 (333B - Native thinking)
+  'deepseek-v3.2': {
+    name: 'DeepSeek V3.2 (333B)',
+    openrouterName: 'deepseek/deepseek-v3.2',
+    maxTokens: 8192,
+    supportsNativeThinking: true,
+    thinkingExtractionMethod: 'native'
+  },
+  
   // Priority 2: Qwen3 235B (Chain-of-thought)
   'qwen3-235b': {
     name: 'Qwen3 235B Instruct',
@@ -78,6 +87,51 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     openrouterName: 'moonshotai/kimi-k2-thinking',
     maxTokens: 4096,
     supportsNativeThinking: true,
+    thinkingExtractionMethod: 'chain-of-thought'
+  },
+  
+  // MiniMax M2.1 (28B - Native thinking)
+  'minimax-m2.1': {
+    name: 'MiniMax M2.1 (28B)',
+    openrouterName: 'minimax/minimax-m2.1',
+    maxTokens: 4096,
+    supportsNativeThinking: true,
+    thinkingExtractionMethod: 'chain-of-thought'
+  },
+  
+  // MiniMax M2 (108B - Native thinking)
+  'minimax-m2': {
+    name: 'MiniMax M2 (108B)',
+    openrouterName: 'minimax/minimax-m2',
+    maxTokens: 4096,
+    supportsNativeThinking: true,
+    thinkingExtractionMethod: 'chain-of-thought'
+  },
+  
+  // Zhipu AI GLM-4.7 (66B - Native thinking)
+  'glm-4.7': {
+    name: 'Zhipu AI GLM-4.7 (66B)',
+    openrouterName: 'z-ai/glm-4.7',
+    maxTokens: 4096,
+    supportsNativeThinking: true,
+    thinkingExtractionMethod: 'chain-of-thought'
+  },
+  
+  // Google Gemini 3 Pro Preview (121B)
+  'gemini-3-pro-preview': {
+    name: 'Google Gemini 3 Pro Preview (121B)',
+    openrouterName: 'google/gemini-3-pro-preview',
+    maxTokens: 8192,
+    supportsNativeThinking: false,
+    thinkingExtractionMethod: 'chain-of-thought'
+  },
+  
+  // Google Gemini 3 Flash Preview (259B)
+  'gemini-3-flash-preview': {
+    name: 'Google Gemini 3 Flash Preview (259B)',
+    openrouterName: 'google/gemini-3-flash-preview',
+    maxTokens: 8192,
+    supportsNativeThinking: false,
     thinkingExtractionMethod: 'chain-of-thought'
   },
   
