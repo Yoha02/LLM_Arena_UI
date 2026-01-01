@@ -154,8 +154,16 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
   },
   
   'gpt-oss-20b': {
-    name: 'GPT OSS 20B (Free)',
-    openrouterName: 'openai/gpt-oss-20b:free',
+    name: 'GPT OSS 20B',
+    openrouterName: 'openai/gpt-oss-20b',
+    maxTokens: 4096,
+    supportsNativeThinking: true,
+    thinkingExtractionMethod: 'chain-of-thought'
+  },
+  
+  'gpt-oss-safeguard-20b': {
+    name: 'GPT OSS Safeguard 20B',
+    openrouterName: 'openai/gpt-oss-safeguard-20b',
     maxTokens: 4096,
     supportsNativeThinking: true,
     thinkingExtractionMethod: 'chain-of-thought'

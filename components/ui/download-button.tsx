@@ -53,24 +53,24 @@ export function DownloadButton({ onDownloadHTML, onDownloadPDF, disabled = false
     <div className={className}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button
-            disabled={disabled || isDownloading}
-            variant="outline"
-            size="sm"
-          >
-            {isDownloading ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+    <Button
+      disabled={disabled || isDownloading}
+      variant="outline"
+      size="sm"
+    >
+      {isDownloading ? (
+        <>
+          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 {isDownloadingHTML ? 'Downloading HTML...' : 'Downloading PDF...'}
-              </>
-            ) : (
-              <>
-                <Download className="w-4 h-4 mr-2" />
-                Download Report
+        </>
+      ) : (
+        <>
+          <Download className="w-4 h-4 mr-2" />
+          Download Report
                 <ChevronDown className="w-4 h-4 ml-2" />
-              </>
-            )}
-          </Button>
+        </>
+      )}
+    </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem 

@@ -74,7 +74,7 @@ export function ExperimentSetup({
       setMaxTurnsInput('5') // Default value when unlimited is unchecked
     } else {
       setIsUnlimited(false)
-      setMaxTurnsInput(maxTurns.toString())
+    setMaxTurnsInput(maxTurns.toString())
     }
   }, [maxTurns])
   return (
@@ -120,23 +120,23 @@ export function ExperimentSetup({
               </div>
             </RadioGroup>
           </div>
-          
-          <div>
-            <Label className="text-base font-medium">Prompting Mode</Label>
-            <RadioGroup
-              value={promptingMode}
-              onValueChange={(value) => onPromptingModeChange(value as "shared" | "individual")}
+
+        <div>
+          <Label className="text-base font-medium">Prompting Mode</Label>
+          <RadioGroup
+            value={promptingMode}
+            onValueChange={(value) => onPromptingModeChange(value as "shared" | "individual")}
               className="flex flex-col space-y-2 mt-2"
-            >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="shared" id="shared" />
+          >
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="shared" id="shared" />
                 <Label htmlFor="shared" className="text-sm">Shared Prompt</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="individual" id="individual" />
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="individual" id="individual" />
                 <Label htmlFor="individual" className="text-sm">Individual Prompts</Label>
-              </div>
-            </RadioGroup>
+            </div>
+          </RadioGroup>
           </div>
         </div>
 
@@ -215,43 +215,43 @@ export function ExperimentSetup({
         <div>
           <Label htmlFor="max-turns">Max Turns</Label>
           <div className="flex items-center gap-3 mt-1">
-            <Input
-              id="max-turns"
-              type="number"
-              min="1"
-              max="100"
-              value={maxTurnsInput}
-              onChange={(e) => {
-                const value = e.target.value;
-                setMaxTurnsInput(value);
-                
+          <Input
+            id="max-turns"
+            type="number"
+            min="1"
+            max="100"
+            value={maxTurnsInput}
+            onChange={(e) => {
+              const value = e.target.value;
+              setMaxTurnsInput(value);
+              
                 // Update parent state immediately if we have a valid number and not unlimited
                 if (value !== '' && !isUnlimited) {
-                  const numValue = Number.parseInt(value);
-                  if (!isNaN(numValue) && numValue >= 1 && numValue <= 100) {
-                    onMaxTurnsChange(numValue);
-                  }
+                const numValue = Number.parseInt(value);
+                if (!isNaN(numValue) && numValue >= 1 && numValue <= 100) {
+                  onMaxTurnsChange(numValue);
                 }
-              }}
-              onBlur={(e) => {
+              }
+            }}
+            onBlur={(e) => {
                 if (isUnlimited) return; // Don't process if unlimited is checked
                 
-                const value = e.target.value;
-                if (value === '' || isNaN(Number.parseInt(value))) {
-                  // Reset to default of 5 if empty or invalid
-                  setMaxTurnsInput('5');
-                  onMaxTurnsChange(5);
-                } else {
-                  const numValue = Number.parseInt(value);
-                  if (numValue < 1) {
-                    setMaxTurnsInput('1');
-                    onMaxTurnsChange(1);
-                  } else if (numValue > 100) {
-                    setMaxTurnsInput('100');
-                    onMaxTurnsChange(100);
-                  }
+              const value = e.target.value;
+              if (value === '' || isNaN(Number.parseInt(value))) {
+                // Reset to default of 5 if empty or invalid
+                setMaxTurnsInput('5');
+                onMaxTurnsChange(5);
+              } else {
+                const numValue = Number.parseInt(value);
+                if (numValue < 1) {
+                  setMaxTurnsInput('1');
+                  onMaxTurnsChange(1);
+                } else if (numValue > 100) {
+                  setMaxTurnsInput('100');
+                  onMaxTurnsChange(100);
                 }
-              }}
+              }
+            }}
               className="w-24"
               disabled={isExperimentRunning || isUnlimited}
             />
@@ -278,9 +278,9 @@ export function ExperimentSetup({
                     }
                   }
                 }}
-                disabled={isExperimentRunning}
+            disabled={isExperimentRunning}
                 className="h-4 w-4"
-              />
+          />
               <Label htmlFor="unlimited-turns" className="text-sm text-gray-600">
                 No Limit
               </Label>
