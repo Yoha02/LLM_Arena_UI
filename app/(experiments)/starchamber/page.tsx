@@ -1,91 +1,408 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { User, Bot, FlaskConical, Construction } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { StarChamberSetupForm } from "@/components/starchamber/setup-form";
+import { StarChamberConversation } from "@/components/starchamber/conversation";
+import { StarChamberMetricsPanel } from "@/components/starchamber/metrics-panel";
+import { useWebSocket } from "@/hooks/useWebSocket";
 import { notifyConnectionChange, notifyExperimentChange } from "../layout";
+import { DEFAULT_PRESET_ID, DEFAULT_RESEARCHER_PERSONA } from "@/lib/starchamber/presets";
+import type { 
+  StarChamberMessage, 
+  ModelMetrics, 
+  StreamingMessage,
+  ExperimentEvent
+} from "@/lib/core/types";
 
-export default function StarChamberPage() {
-  // Notify layout that we're on StarChamber (no experiment running yet)
-  useEffect(() => {
-    notifyExperimentChange(null, null);
-  }, []);
+// ============ Types ============
 
-  return (
-    <div className="space-y-6">
-      {/* Coming Soon Banner */}
-      <Card className="border-dashed border-2 border-primary/50 bg-primary/5">
-        <CardHeader className="text-center">
-          <div className="flex justify-center mb-4">
-            <div className="relative">
-              <FlaskConical className="w-16 h-16 text-primary" />
-              <Construction className="w-8 h-8 text-yellow-500 absolute -bottom-1 -right-1" />
-            </div>
-          </div>
-          <CardTitle className="text-2xl">StarChamber</CardTitle>
-          <CardDescription className="text-base">
-            Direct Human-LLM Interrogation Mode
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="text-center space-y-4">
-          <Badge variant="secondary" className="text-sm px-4 py-1">
-            Coming Soon
-          </Badge>
-          
-          <p className="text-muted-foreground max-w-lg mx-auto">
-            StarChamber enables researchers to have direct one-on-one conversations with a single LLM,
-            observing thinking traces, sentiment analysis, and token confidence in real-time.
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 max-w-2xl mx-auto">
-            <FeatureCard
-              icon={<User className="w-6 h-6" />}
-              title="Direct Interrogation"
-              description="One-on-one conversation with full control"
-            />
-            <FeatureCard
-              icon={<Bot className="w-6 h-6" />}
-              title="Thinking Traces"
-              description="See the model's reasoning process"
-            />
-            <FeatureCard
-              icon={<FlaskConical className="w-6 h-6" />}
-              title="Token Analysis"
-              description="Confidence scoring per token (when available)"
-            />
-          </div>
-
-          <div className="pt-4">
-            <Button variant="outline" disabled>
-              <Construction className="w-4 h-4 mr-2" />
-              Under Construction
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+interface ModelOption {
+  id: string;
+  name: string;
+  openrouterName: string;
+  supportsLogprobs?: boolean;
 }
 
-function FeatureCard({ 
-  icon, 
-  title, 
-  description 
-}: { 
-  icon: React.ReactNode; 
-  title: string; 
-  description: string;
-}) {
+// ============ Page Component ============
+
+export default function StarChamberPage() {
+  // ============ Model State ============
+  const [availableModels, setAvailableModels] = useState<ModelOption[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(true);
+  const [selectedModel, setSelectedModel] = useState("");
+
+  // ============ Configuration State ============
+  const [selectedPreset, setSelectedPreset] = useState(DEFAULT_PRESET_ID);
+  const [systemContext, setSystemContext] = useState("You are a helpful, harmless, and honest AI assistant."); // Default from Generic Assistant preset
+  const [researcherPersona, setResearcherPersona] = useState(DEFAULT_RESEARCHER_PERSONA);
+  const [requestLogprobs, setRequestLogprobs] = useState(true);
+  const [firstMessage, setFirstMessage] = useState("");
+
+  // ============ Experiment State ============
+  const [experimentId, setExperimentId] = useState<string | null>(null);
+  const [isExperimentRunning, setIsExperimentRunning] = useState(false);
+  const [isModelResponding, setIsModelResponding] = useState(false);
+  const [waitingForResearcher, setWaitingForResearcher] = useState(false);
+  const [experimentStatus, setExperimentStatus] = useState("");
+  const [hasCompletedExperiment, setHasCompletedExperiment] = useState(false);
+
+  // ============ Conversation State ============
+  const [conversation, setConversation] = useState<StarChamberMessage[]>([]);
+  const [currentTurn, setCurrentTurn] = useState(0);
+  
+  // ============ Streaming State ============
+  const [streamingContent, setStreamingContent] = useState("");
+  const [streamingThinking, setStreamingThinking] = useState("");
+  
+  // ============ Metrics State ============
+  const [metrics, setMetrics] = useState<ModelMetrics>({
+    tokensUsed: 0,
+    turnsCompleted: 0,
+    goalDeviationScore: 0,
+    turnsToDeviate: null,
+    sentimentHistory: [],
+  });
+
+  // ============ UI State ============
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  
+  // ============ Refs ============
+  const experimentIdRef = useRef<string | null>(null);
+
+  // ============ WebSocket Event Handlers ============
+  
+  const handleExperimentEvent = useCallback((event: ExperimentEvent) => {
+    console.log("📡 StarChamber event:", event.type, event.data);
+    
+    switch (event.type) {
+      case "experiment_started":
+        setIsExperimentRunning(true);
+        setWaitingForResearcher(false);
+        setExperimentStatus("Experiment started - sending first message...");
+        break;
+        
+      case "model_responding":
+        setIsModelResponding(true);
+        setWaitingForResearcher(false);
+        setExperimentStatus("Model is generating response...");
+        break;
+        
+      case "model_response_complete":
+        setIsModelResponding(false);
+        setWaitingForResearcher(true);
+        setStreamingContent("");
+        setStreamingThinking("");
+        setExperimentStatus("Your turn - type your next message");
+        
+        // Add the complete message to conversation
+        if (event.data?.message) {
+          const message: StarChamberMessage = {
+            id: event.data.message.id || `msg-${Date.now()}`,
+            role: "model",
+            senderName: event.data.modelName || "Model",
+            content: event.data.message.content,
+            thinking: event.data.message.thinking,
+            turnNumber: event.data.turnNumber || currentTurn,
+            timestamp: new Date(),
+            tokensUsed: event.data.message.tokensUsed,
+            logprobs: event.data.message.logprobs,
+          };
+          setConversation(prev => [...prev, message]);
+          setCurrentTurn(prev => prev + 1);
+        }
+        break;
+        
+      case "sentiment_update":
+        if (event.data?.sentiment) {
+          setMetrics(prev => ({
+            ...prev,
+            sentimentHistory: [...prev.sentimentHistory, event.data.sentiment],
+          }));
+        }
+        break;
+        
+      case "experiment_stopped":
+      case "experiment_complete":
+        setIsExperimentRunning(false);
+        setIsModelResponding(false);
+        setWaitingForResearcher(false);
+        setHasCompletedExperiment(true);
+        setExperimentStatus("Experiment ended");
+        break;
+        
+      case "error":
+        setExperimentStatus(`Error: ${event.message || "Unknown error"}`);
+        setIsModelResponding(false);
+        break;
+    }
+  }, [currentTurn]);
+
+  const handleStreamingMessage = useCallback((message: StreamingMessage) => {
+    if (message.model === "starchamber" || message.model === "single") {
+      setStreamingContent(message.content);
+      if (message.thinking) {
+        setStreamingThinking(message.thinking);
+      }
+    }
+  }, []);
+
+  const handleExperimentCreated = useCallback((data: { experimentId: string }) => {
+    console.log("📢 StarChamber experiment created:", data.experimentId);
+    setExperimentId(data.experimentId);
+    experimentIdRef.current = data.experimentId;
+  }, []);
+
+  const handleModelMetrics = useCallback((data: { model: string; metrics: ModelMetrics }) => {
+    if (data.model === "single" || data.model === "starchamber") {
+      setMetrics(prev => ({
+        ...prev,
+        ...data.metrics,
+      }));
+    }
+  }, []);
+
+  // ============ WebSocket Connection ============
+  
+  const { isConnected, connectionError } = useWebSocket({
+    experimentId: experimentId || "starchamber-default",
+    onExperimentEvent: handleExperimentEvent,
+    onStreamingMessage: handleStreamingMessage,
+    onExperimentCreated: handleExperimentCreated,
+    onModelMetrics: handleModelMetrics,
+  });
+
+  // ============ Layout Notifications ============
+  
+  useEffect(() => {
+    notifyConnectionChange(isConnected);
+  }, [isConnected]);
+
+  useEffect(() => {
+    notifyExperimentChange(
+      isExperimentRunning ? experimentId : null,
+      isExperimentRunning ? "starchamber" : null
+    );
+  }, [experimentId, isExperimentRunning]);
+
+  // ============ Fetch Models ============
+  
+  useEffect(() => {
+    const fetchModels = async () => {
+      try {
+        const response = await fetch("/api/models?available=true");
+        if (response.ok) {
+          const data = await response.json();
+          setAvailableModels(data.models || []);
+          
+          // Set default model
+          if (data.models && data.models.length > 0) {
+            const deepseekModel = data.models.find((m: ModelOption) => m.id === "deepseek-r1");
+            if (deepseekModel) {
+              setSelectedModel("deepseek-r1");
+            } else {
+              setSelectedModel(data.models[0].id);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch models:", error);
+      } finally {
+        setIsLoadingModels(false);
+      }
+    };
+    
+    fetchModels();
+  }, []);
+
+  // ============ Experiment Actions ============
+  
+  const startExperiment = async () => {
+    if (!selectedModel || !firstMessage.trim()) return;
+    
+    setExperimentStatus("Starting experiment...");
+    
+    try {
+      const modelInfo = availableModels.find(m => m.id === selectedModel);
+      
+      const response = await fetch("/api/starchamber/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: {
+            modelId: selectedModel,
+            modelName: modelInfo?.name || selectedModel,
+          },
+          systemContext,
+          researcherPersona: researcherPersona || DEFAULT_RESEARCHER_PERSONA,
+          requestLogprobs,
+          firstMessage: firstMessage.trim(),
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to start experiment");
+      }
+      
+      const data = await response.json();
+      setExperimentId(data.experimentId);
+      experimentIdRef.current = data.experimentId;
+      setIsExperimentRunning(true);
+      setHasCompletedExperiment(false);
+      
+      // Add the researcher's first message to conversation
+      const researcherMessage: StarChamberMessage = {
+        id: `researcher-${Date.now()}`,
+        role: "researcher",
+        senderName: researcherPersona || DEFAULT_RESEARCHER_PERSONA,
+        content: firstMessage.trim(),
+        turnNumber: 1,
+        timestamp: new Date(),
+      };
+      setConversation([researcherMessage]);
+      setCurrentTurn(1);
+      setFirstMessage("");
+      
+      // Immediately set model responding
+      setIsModelResponding(true);
+      setExperimentStatus("Model is thinking...");
+      
+    } catch (error) {
+      console.error("Failed to start experiment:", error);
+      setExperimentStatus(`Error: ${error instanceof Error ? error.message : "Failed to start"}`);
+    }
+  };
+
+  const stopExperiment = async () => {
+    if (!experimentId) return;
+    
+    try {
+      await fetch("/api/starchamber/stop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ experimentId }),
+      });
+      
+      setIsExperimentRunning(false);
+      setIsModelResponding(false);
+      setWaitingForResearcher(false);
+      setHasCompletedExperiment(true);
+      setExperimentStatus("Experiment stopped");
+    } catch (error) {
+      console.error("Failed to stop experiment:", error);
+    }
+  };
+
+  const sendMessage = async (message: string) => {
+    if (!experimentId || !message.trim() || isModelResponding) return;
+    
+    // Add researcher message to conversation immediately
+    const researcherMessage: StarChamberMessage = {
+      id: `researcher-${Date.now()}`,
+      role: "researcher",
+      senderName: researcherPersona || DEFAULT_RESEARCHER_PERSONA,
+      content: message.trim(),
+      turnNumber: currentTurn + 1,
+      timestamp: new Date(),
+    };
+    setConversation(prev => [...prev, researcherMessage]);
+    
+    // Send to backend
+    setIsModelResponding(true);
+    setWaitingForResearcher(false);
+    setExperimentStatus("Model is thinking...");
+    
+    try {
+      const response = await fetch("/api/starchamber/turn", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          experimentId,
+          message: message.trim(),
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to send message");
+      }
+      
+    } catch (error) {
+      console.error("Failed to send message:", error);
+      setExperimentStatus(`Error: ${error instanceof Error ? error.message : "Failed to send"}`);
+      setIsModelResponding(false);
+      setWaitingForResearcher(true);
+    }
+  };
+
+  const handleDownloadReport = async () => {
+    // TODO: Implement report generation
+    console.log("Download report for experiment:", experimentId);
+    alert("Report generation coming soon!");
+  };
+
+  // ============ Get Model Name ============
+  
+  const getModelName = (modelId: string) => {
+    const model = availableModels.find(m => m.id === modelId);
+    return model?.name || modelId;
+  };
+
+  // ============ Render ============
+  
   return (
-    <div className="p-4 rounded-lg bg-background border">
-      <div className="flex flex-col items-center text-center gap-2">
-        <div className="text-primary">{icon}</div>
-        <h3 className="font-medium">{title}</h3>
-        <p className="text-xs text-muted-foreground">{description}</p>
+    <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
+      {/* Left Column - Setup */}
+      <div className="lg:col-span-3 space-y-6">
+        <StarChamberSetupForm
+          availableModels={availableModels}
+          isLoadingModels={isLoadingModels}
+          selectedModel={selectedModel}
+          onModelChange={setSelectedModel}
+          selectedPreset={selectedPreset}
+          onPresetChange={setSelectedPreset}
+          systemContext={systemContext}
+          onSystemContextChange={setSystemContext}
+          researcherPersona={researcherPersona}
+          onResearcherPersonaChange={setResearcherPersona}
+          requestLogprobs={requestLogprobs}
+          onRequestLogprobsChange={setRequestLogprobs}
+          firstMessage={firstMessage}
+          onFirstMessageChange={setFirstMessage}
+          isExperimentRunning={isExperimentRunning}
+          onStartExperiment={startExperiment}
+          onStopExperiment={stopExperiment}
+          hasCompletedExperiment={hasCompletedExperiment}
+          onDownloadReport={handleDownloadReport}
+        />
+      </div>
+
+      {/* Center Column - Conversation */}
+      <div className="lg:col-span-4">
+        <StarChamberConversation
+          conversation={conversation}
+          isExperimentRunning={isExperimentRunning}
+          isModelResponding={isModelResponding}
+          waitingForResearcher={waitingForResearcher}
+          experimentStatus={experimentStatus}
+          isWebSocketConnected={isConnected}
+          webSocketError={connectionError}
+          streamingContent={streamingContent}
+          streamingThinking={streamingThinking}
+          onSendMessage={sendMessage}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+        />
+      </div>
+
+      {/* Right Column - Metrics */}
+      <div className="lg:col-span-3">
+        <StarChamberMetricsPanel
+          metrics={metrics}
+          modelName={getModelName(selectedModel)}
+          isExperimentRunning={isExperimentRunning}
+        />
       </div>
     </div>
   );
 }
-
