@@ -81,17 +81,14 @@ export const useWebSocket = ({
 
     // Enhanced connection event handlers
     newSocket.on('connect', () => {
-      console.log('✅ WebSocket connected:', newSocket.id, 'Transport:', newSocket.io.engine.transport.name);
       setIsConnected(true);
       setConnectionError(null);
     });
 
     newSocket.on('disconnect', (reason) => {
-      console.log('🔌 WebSocket disconnected:', reason);
       setIsConnected(false);
       if (reason === 'io server disconnect') {
         // The disconnection was initiated by the server, need to reconnect manually
-        console.log('🔄 Attempting manual reconnection...');
         newSocket.connect();
       }
     });
@@ -104,47 +101,42 @@ export const useWebSocket = ({
 
     // Monitor transport changes
     newSocket.on('upgrade', () => {
-      console.log('⬆️ Transport upgraded to:', newSocket.io.engine.transport.name);
+      // Transport upgraded successfully
     });
 
-    newSocket.on('upgradeError', (error) => {
-      console.warn('⚠️ Transport upgrade failed:', error);
+    newSocket.on('upgradeError', () => {
+      // Transport upgrade failed, will continue with current transport
     });
 
     // Enhanced reconnection handling
-    newSocket.on('reconnect', (attemptNumber) => {
-      console.log(`🔄 Reconnected after ${attemptNumber} attempts`);
+    newSocket.on('reconnect', () => {
       setIsConnected(true);
       setConnectionError(null);
     });
 
     newSocket.on('reconnect_attempt', (attemptNumber) => {
-      console.log(`🔄 Reconnection attempt ${attemptNumber}`);
       setConnectionError(`Reconnecting... (attempt ${attemptNumber})`);
     });
 
     newSocket.on('reconnect_failed', () => {
-      console.error('💥 All reconnection attempts failed');
+      console.error('WebSocket reconnection failed permanently');
       setConnectionError('Connection failed permanently. Please refresh the page.');
       setIsConnected(false);
     });
 
     // Connection confirmation handler
-    newSocket.on('connection-confirmed', (data: any) => {
-      console.log('✅ Connection confirmed:', data);
+    newSocket.on('connection-confirmed', () => {
+      // Connection confirmed by server
     });
 
-    newSocket.on('joined-experiment', (data: any) => {
-      console.log('🏠 Joined experiment confirmed:', data);
+    newSocket.on('joined-experiment', () => {
+      // Joined experiment room confirmed
     });
 
     // Handle experiment creation broadcast
     newSocket.on('experiment_created', (data: any) => {
-      console.log('📢 New experiment created:', data.experimentId);
-      
       // Automatically join the new experiment room
       if (data.experimentId) {
-        console.log('🔄 Auto-joining experiment room:', data.experimentId);
         newSocket.emit('join-experiment', data.experimentId);
       }
       
@@ -160,7 +152,6 @@ export const useWebSocket = ({
 
     // Experiment event handlers with safe callback checks
     newSocket.on('experiment_event', (event: ExperimentEvent) => {
-      console.log('📡 Received experiment event:', event.type, event.data);
       if (onExperimentEventRef.current) {
         try {
           onExperimentEventRef.current(event);
@@ -171,38 +162,21 @@ export const useWebSocket = ({
     });
 
     newSocket.on('message_stream', (message: StreamingMessage) => {
-      console.log('📨 ✅ RECEIVED STREAMING MESSAGE:', { 
-        id: message.id, 
-        model: message.model, 
-        isComplete: message.isComplete,
-        contentLength: message.content.length,
-        content: message.content.substring(0, 50) + (message.content.length > 50 ? '...' : '')
-      });
       if (onStreamingMessageRef.current) {
         try {
           onStreamingMessageRef.current(message);
         } catch (error) {
           console.error('Error handling streaming message:', error);
         }
-      } else {
-        console.warn('⚠️ No streaming message handler available');
       }
     });
 
-    // Add test message listener to verify WebSocket communication
-    newSocket.on('test_message', (data) => {
-      console.log('🧪 ✅ TEST MESSAGE RECEIVED:', data);
-    });
-
-    // Add test listener to see if we receive ANY events
-    newSocket.onAny((eventName, ...args) => {
-      if (eventName.includes('stream') || eventName.includes('experiment') || eventName.includes('test')) {
-        console.log(`🔍 Received event: ${eventName}`, args.length > 0 ? args[0] : '');
-      }
+    // Test message listener for development
+    newSocket.on('test_message', () => {
+      // Test message received - used for debugging
     });
 
     newSocket.on('experiment_state', (state: ExperimentState) => {
-      console.log('Received experiment state:', state);
       if (onExperimentStateRef.current) {
         try {
           onExperimentStateRef.current(state);
@@ -213,7 +187,6 @@ export const useWebSocket = ({
     });
 
     newSocket.on('model_metrics', (data: { model: 'A' | 'B'; metrics: any }) => {
-      console.log(`📊 Received metrics for Model ${data.model}:`, data.metrics);
       if (onModelMetricsRef.current) {
         try {
           onModelMetricsRef.current(data);
@@ -235,13 +208,11 @@ export const useWebSocket = ({
   useEffect(() => {
     // Join experiment room when experimentId changes and socket is connected
     if (socket && experimentId && isConnected) {
-      console.log('🏠 Manually joining experiment room:', experimentId);
       socket.emit('join-experiment', experimentId);
       
       // Also try to rejoin after a brief delay to ensure connection
       setTimeout(() => {
         if (socket.connected) {
-          console.log('🔄 Re-joining experiment room to ensure connection:', experimentId);
           socket.emit('join-experiment', experimentId);
         }
       }, 1000);

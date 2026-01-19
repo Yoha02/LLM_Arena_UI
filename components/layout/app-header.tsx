@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Swords, User, FlaskConical, Wifi, WifiOff } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Swords, User } from "lucide-react";
 
 // ============ Tab Configuration ============
 
@@ -37,8 +36,6 @@ interface AppHeaderProps {
 
 export function AppHeader({ 
   isConnected = false, 
-  experimentId = null,
-  experimentType = null 
 }: AppHeaderProps) {
   const pathname = usePathname();
 
@@ -47,49 +44,38 @@ export function AppHeader({
 
   return (
     <header className="sticky top-0 z-50 bg-background border-b">
-      <div className="container mx-auto px-4">
-        {/* Logo Row */}
-        <div className="flex items-center justify-between py-3">
-          <div className="flex items-center gap-3">
-            <FlaskConical className="w-8 h-8 text-primary" />
-            <div>
-              <h1 className="text-xl font-bold">LLM Research Platform</h1>
-              <p className="text-xs text-muted-foreground">
+      <div className="container mx-auto px-6">
+        {/* Title Row - Clean and Professional */}
+        <div className="flex items-center justify-between pt-3 pb-2">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">
+              LLM Arena:
+              <span className="font-normal text-muted-foreground ml-2 text-xl">
                 Inter-LLM Interaction Observer
-              </p>
-            </div>
+              </span>
+            </h1>
+            <p className="text-xs text-muted-foreground">AI Behavioral Research Platform</p>
           </div>
-
-          {/* Status Indicators */}
-          <div className="flex items-center gap-4">
-            {/* Experiment Status */}
-            {experimentId && (
-              <div className="flex items-center gap-2 text-xs">
-                <Badge variant="secondary" className="font-mono">
-                  {experimentType === "starchamber" ? "SC" : "AR"}-{experimentId.slice(0, 8)}
-                </Badge>
-              </div>
-            )}
-
-            {/* WebSocket Status */}
-            <div className="flex items-center gap-1.5">
-              {isConnected ? (
-                <>
-                  <Wifi className="w-4 h-4 text-green-500" />
-                  <span className="text-xs text-green-600 dark:text-green-400">Connected</span>
-                </>
-              ) : (
-                <>
-                  <WifiOff className="w-4 h-4 text-red-500" />
-                  <span className="text-xs text-red-600 dark:text-red-400">Disconnected</span>
-                </>
+          
+          {/* Connection Status - Subtle indicator */}
+          <div className="flex items-center gap-2">
+            <div 
+              className={cn(
+                "w-2 h-2 rounded-full",
+                isConnected ? "bg-green-500" : "bg-red-500"
               )}
-            </div>
+            />
+            <span className={cn(
+              "text-sm",
+              isConnected ? "text-muted-foreground" : "text-red-500"
+            )}>
+              {isConnected ? "Connected" : "Disconnected"}
+            </span>
           </div>
         </div>
 
-        {/* Tab Navigation */}
-        <nav className="flex gap-1 -mb-px">
+        {/* Tab Navigation - Underlined style */}
+        <nav className="flex gap-8 -mb-px border-t border-border/40 pt-3">
           {EXPERIMENT_TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -99,15 +85,15 @@ export function AppHeader({
                 key={tab.id}
                 href={tab.href}
                 className={cn(
-                  "flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors",
+                  "flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors",
                   isActive
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/50"
+                    ? "border-foreground text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
                 )}
               >
                 <Icon className="w-4 h-4" />
                 <span>{tab.label}</span>
-                <span className="text-xs text-muted-foreground hidden sm:inline">
+                <span className="text-muted-foreground font-normal">
                   ({tab.description})
                 </span>
               </Link>

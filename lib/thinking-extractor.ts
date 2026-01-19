@@ -413,6 +413,47 @@ Response:`;
 Please explain your thinking process and reasoning before providing your answer.`;
     }
   }
+
+  /**
+   * Extract thinking from streaming content
+   * Used during real-time streaming to separate thinking from content
+   * Handles DeepSeek R1 style <think>...</think> tags
+   */
+  extractThinkingFromStream(streamedContent: string): { content: string; thinking: string | null } {
+    try {
+      // Check for DeepSeek R1 style <think> tags
+      const thinkMatch = streamedContent.match(/<think>([\s\S]*?)<\/think>/);
+      if (thinkMatch) {
+        const thinking = thinkMatch[1].trim();
+        const content = streamedContent.replace(/<think>[\s\S]*?<\/think>/, '').trim();
+        return { content, thinking };
+      }
+
+      // Check for incomplete <think> tag (still streaming thinking)
+      const incompleteThinkMatch = streamedContent.match(/<think>([\s\S]*)$/);
+      if (incompleteThinkMatch) {
+        // Still receiving thinking content
+        return { 
+          content: '', 
+          thinking: incompleteThinkMatch[1].trim() + '...' 
+        };
+      }
+
+      // Check for reasoning tokens pattern (alternative format)
+      const reasoningMatch = streamedContent.match(/\[REASONING\]([\s\S]*?)\[\/REASONING\]/);
+      if (reasoningMatch) {
+        const thinking = reasoningMatch[1].trim();
+        const content = streamedContent.replace(/\[REASONING\][\s\S]*?\[\/REASONING\]/, '').trim();
+        return { content, thinking };
+      }
+
+      // No thinking pattern found - return content as is
+      return { content: streamedContent, thinking: null };
+    } catch (error) {
+      console.error('Error in stream thinking extraction:', error);
+      return { content: streamedContent, thinking: null };
+    }
+  }
 }
 
 // Export default instance

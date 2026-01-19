@@ -20,7 +20,8 @@
 11. [WebSocket Communication](#11-websocket-communication)
 12. [State Management](#12-state-management)
 13. [Report Generation](#13-report-generation)
-14. [Architecture Diagram](#14-architecture-diagram)
+14. [StarChamber Feature](#14-starchamber-feature)
+15. [Architecture Diagram](#15-architecture-diagram)
 
 ---
 
@@ -29,11 +30,13 @@
 The **LLM Arena** is a sophisticated web-based research platform designed to study behavioral patterns, cooperation, and competition between autonomous Large Language Models. 
 
 ### Key Features
-- **Dual Model Conversations**: Two LLMs interact with each other based on given scenarios
+- **Dual Model Conversations (Arena)**: Two LLMs interact with each other based on given scenarios
+- **Human-LLM Interrogation (StarChamber)**: Direct one-on-one researcher-to-model conversation
 - **Real-time Streaming**: Live WebSocket updates as models generate responses
 - **AI-Powered Judging**: GPT-4o Mini evaluates each turn for sentiment, cooperation, and goal deviation
 - **Content Filtering**: Ensures fair experiments by removing internal reasoning before sending to other model
 - **Manual & Automatic Modes**: Full control over experiment flow or hands-off automation
+- **Token Logprobs Support**: Optional token confidence analysis (model-dependent)
 - **Comprehensive Reporting**: HTML and PDF exports with full conversation logs and analytics
 
 ### Research Applications
@@ -77,54 +80,74 @@ The **LLM Arena** is a sophisticated web-based research platform designed to stu
 ```
 LLM_Arena_UI/
 ├── app/                          # Next.js App Router
-│   ├── page.tsx                  # Main UI orchestrator
-│   ├── layout.tsx                # App layout wrapper
+│   ├── page.tsx                  # Redirect to /arena
+│   ├── layout.tsx                # Root layout wrapper
 │   ├── globals.css               # Global styles
+│   ├── (experiments)/            # Route group for experiments
+│   │   ├── layout.tsx            # Shared experiment layout with header
+│   │   ├── arena/
+│   │   │   └── page.tsx          # Arena (Model vs Model) page
+│   │   └── starchamber/
+│   │       └── page.tsx          # StarChamber (Human vs Model) page
 │   └── api/                      # Backend API routes
-│       ├── experiment/
+│       ├── experiment/           # Arena experiment routes
 │       │   ├── start/route.ts    # Start experiment
 │       │   ├── stop/route.ts     # Stop experiment
 │       │   ├── manual-continue/route.ts  # Manual mode continue
 │       │   ├── next-turn/route.ts        # Start next turn
 │       │   ├── status/route.ts   # Get experiment status
 │       │   └── turn/route.ts     # Turn management
+│       ├── starchamber/          # StarChamber experiment routes
+│       │   ├── start/route.ts    # Start StarChamber experiment
+│       │   ├── stop/route.ts     # Stop StarChamber experiment
+│       │   └── turn/route.ts     # Process researcher turn
 │       ├── models/route.ts       # Available models list
 │       ├── health/route.ts       # Health check
 │       └── websocket/route.ts    # WebSocket utilities
 │
 ├── components/                   # React components
-│   ├── chat-message.tsx          # Individual message display
+│   ├── layout/                   # Layout components
+│   │   └── app-header.tsx        # Global header with tabbed navigation
+│   ├── shared/                   # Shared components
+│   │   ├── thinking-trace.tsx    # Thinking trace display
+│   │   └── message-bubble.tsx    # Chat message bubble
+│   ├── starchamber/              # StarChamber-specific components
+│   │   ├── setup-form.tsx        # Model/preset/persona configuration
+│   │   ├── conversation.tsx      # Chat conversation + input
+│   │   └── metrics-panel.tsx     # Sentiment and metrics display
+│   ├── chat-message.tsx          # Individual message display (Arena)
 │   ├── control-panel.tsx         # Model A/B control panels
 │   ├── conversation-log.tsx      # Chat display + manual controls
 │   ├── experiment-setup.tsx      # Experiment configuration
 │   ├── metrics-dashboard.tsx     # Sentiment charts + scores
 │   ├── demo-scenarios.tsx        # Pre-built demo scenarios
-│   ├── header.tsx                # App header
+│   ├── header.tsx                # Legacy header (Arena)
 │   └── ui/                       # shadcn/ui components
-│       ├── button.tsx
-│       ├── card.tsx
-│       ├── dialog.tsx
-│       ├── select.tsx
-│       ├── textarea.tsx
-│       ├── scroll-area.tsx
-│       ├── collapsible.tsx
-│       ├── download-button.tsx
 │       └── ... (40+ UI components)
 │
 ├── lib/                          # Core business logic
-│   ├── types.ts                  # TypeScript interfaces
-│   ├── experiment-manager.ts     # Experiment orchestration (Singleton)
+│   ├── core/                     # Core shared types
+│   │   └── types.ts              # Centralized TypeScript interfaces
+│   ├── starchamber/              # StarChamber-specific logic
+│   │   ├── manager.ts            # StarChamber experiment orchestration
+│   │   ├── presets.ts            # System context presets
+│   │   ├── report-generator.ts   # HTML report generation
+│   │   └── pdf-generator.tsx     # PDF report generation
+│   ├── types.ts                  # TypeScript interfaces (Arena)
+│   ├── experiment-manager.ts     # Experiment orchestration (Arena)
 │   ├── judge-evaluator.ts        # AI judge analysis
 │   ├── content-filter.ts         # Response filtering
 │   ├── openrouter.ts             # OpenRouter API wrapper
 │   ├── thinking-extractor.ts     # Extract reasoning traces
 │   ├── websocket-manager.ts      # WebSocket event emission
-│   ├── report-generator.ts       # HTML report generation
-│   ├── pdf-generator.tsx         # PDF report generation
+│   ├── report-generator.ts       # HTML report generation (Arena)
+│   ├── pdf-generator.tsx         # PDF report generation (Arena)
 │   └── utils.ts                  # Utility functions
 │
 ├── hooks/                        # React hooks
 │   ├── useWebSocket.ts           # WebSocket connection hook
+│   ├── shared/                   # Shared hooks
+│   │   └── useWebSocket.ts       # Shared WebSocket hook
 │   ├── use-mobile.tsx            # Mobile detection
 │   └── use-toast.ts              # Toast notifications
 │
@@ -833,7 +856,184 @@ const [lastExperimentData, setLastExperimentData] = useState<{...} | null>(null)
 
 ---
 
-## 14. Architecture Diagram
+## 14. StarChamber Feature
+
+### Overview
+
+**StarChamber** is a direct Human-LLM interrogation mode that allows researchers to have one-on-one conversations with a single model. Unlike the Arena's Model vs Model approach, StarChamber puts the researcher in direct control of the conversation.
+
+### Key Capabilities
+
+| Feature | Description |
+|---------|-------------|
+| **Single Model Interrogation** | Direct conversation with one LLM |
+| **System Context Presets** | Pre-configured personas and scenarios |
+| **Custom Researcher Persona** | Configurable display name for researcher |
+| **Token Logprobs** | Optional confidence analysis per token |
+| **Thinking Traces** | Full visibility of model reasoning |
+| **Sentiment Analysis** | Judge evaluates model responses per turn |
+| **Fullscreen Mode** | Immersive conversation experience |
+| **Report Generation** | HTML/PDF exports with logprobs and thinking |
+
+### Navigation
+
+StarChamber is accessible via tabbed navigation in the app header:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  🏟️ LLM Arena (Model vs Model)  |  🔬 StarChamber (Direct)      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+Routes:
+- `/arena` - Model vs Model experiments
+- `/starchamber` - Human vs Model interrogation
+
+### UI Layout
+
+```
+┌─────────────────┬──────────────────────┬─────────────────┐
+│  Setup Form     │   Conversation       │  Metrics Panel  │
+│                 │   Control Bar        │                 │
+│  - Model Select │   ─────────────────  │  - Sentiment    │
+│  - Logprobs     │   Start/Stop/Status  │    Chart        │
+│  - Context      │   First Message      │                 │
+│    Preset       │   ─────────────────  │  - Experiment   │
+│  - System       │   Conversation       │    Status       │
+│    Context      │   Messages           │                 │
+│  - Persona      │   ─────────────────  │                 │
+│                 │   Message Input      │                 │
+└─────────────────┴──────────────────────┴─────────────────┘
+```
+
+### StarChamber Data Types
+
+```typescript
+interface StarChamberExperimentConfig {
+  model: {
+    modelId: string;
+    modelName: string;
+    apiKey?: string;
+  };
+  systemContext: string;
+  researcherPersona: string;
+  requestLogprobs: boolean;
+  presetId?: string;
+}
+
+interface StarChamberMessage {
+  id: string;
+  role: 'researcher' | 'model';
+  senderName: string;
+  content: string;
+  thinking?: string;
+  turnNumber: number;
+  timestamp: Date;
+  tokensUsed?: number;
+  logprobs?: LogprobsData;
+}
+
+interface LogprobsData {
+  available: boolean;
+  tokens: TokenLogprob[];
+  averageConfidence: number;
+  lowConfidenceTokens: TokenLogprob[];
+}
+
+interface TokenLogprob {
+  token: string;
+  logprob: number;
+  probability: number;
+  topAlternatives?: Array<{
+    token: string;
+    logprob: number;
+    probability: number;
+  }>;
+}
+```
+
+### System Context Presets
+
+Pre-configured templates available in `lib/starchamber/presets.ts`:
+
+| Preset ID | Name | Use Case |
+|-----------|------|----------|
+| `generic-assistant` | Generic Assistant | General-purpose helpful AI |
+| `roleplay-character` | Roleplay Character | Character embodiment testing |
+| `technical-expert` | Technical Expert | Domain-specific Q&A |
+| `debate-partner` | Debate Partner | Argumentation analysis |
+| `creative-writer` | Creative Writer | Creative content generation |
+| `custom` | Custom Context | User-defined system prompt |
+
+### StarChamber API Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/starchamber/start` | POST | Start StarChamber experiment |
+| `/api/starchamber/turn` | POST | Process researcher message |
+| `/api/starchamber/stop` | POST | End experiment |
+
+### StarChamber Manager
+
+`lib/starchamber/manager.ts` - Singleton class for experiment orchestration:
+
+```typescript
+class StarChamberManager {
+  startExperiment(params: StartExperimentParams): Promise<void>
+  processResearcherMessage(experimentId: string, message: string): Promise<void>
+  stopExperiment(experimentId: string): Promise<void>
+}
+```
+
+### Experiment Flow
+
+```
+1. Researcher configures model, preset, and persona
+2. Researcher enters first message and starts experiment
+3. StarChamberManager:
+   - Creates experiment state
+   - Sends first message to model
+   - Streams response via WebSocket
+   - Runs judge evaluation for sentiment
+4. Researcher sees model response with:
+   - Thinking traces (if available)
+   - Token confidence (if logprobs enabled)
+   - Sentiment scores
+5. Researcher sends next message
+6. Loop continues until researcher ends experiment
+7. Generate HTML/PDF report with full conversation
+```
+
+### Token Logprobs Feature
+
+When enabled, StarChamber requests token probabilities from the model:
+
+- **High Confidence (>80%)**: Green highlighting
+- **Medium Confidence (50-80%)**: Yellow highlighting
+- **Low Confidence (<50%)**: Red highlighting
+
+Logprobs are:
+- Requested via OpenRouter's `logprobs: true` parameter
+- Collected during streaming
+- Displayed in expandable UI sections
+- Included in reports with color-coded visualization
+
+**Note**: Not all models support logprobs. When unavailable, the UI displays "Logprobs unavailable" without impeding the experiment.
+
+### Report Generation
+
+StarChamber reports include:
+- Experiment setup (model, persona, system context)
+- Full conversation log with thinking traces
+- Token confidence visualization (when available)
+- Sentiment analysis charts
+- Summary statistics
+
+Formats: HTML (interactive) and PDF (professional)
+
+---
+
+## 15. Architecture Diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -915,23 +1115,48 @@ const [lastExperimentData, setLastExperimentData] = useState<{...} | null>(null)
 
 ## Quick Reference: Key File Locations
 
+### Arena (Model vs Model)
+
 | Functionality | File |
 |---------------|------|
-| Main UI orchestration | `app/page.tsx` |
+| Arena page | `app/(experiments)/arena/page.tsx` |
 | Experiment control | `lib/experiment-manager.ts` |
-| Judge evaluation | `lib/judge-evaluator.ts` |
-| Content filtering | `lib/content-filter.ts` |
-| OpenRouter API | `lib/openrouter.ts` |
-| WebSocket server | `server.js` |
-| WebSocket client | `hooks/useWebSocket.ts` |
-| WebSocket emission | `lib/websocket-manager.ts` |
 | Chat display | `components/chat-message.tsx` |
 | Conversation view | `components/conversation-log.tsx` |
 | Model panels | `components/control-panel.tsx` |
 | Experiment config | `components/experiment-setup.tsx` |
 | Metrics charts | `components/metrics-dashboard.tsx` |
 | Report generation | `lib/report-generator.ts` |
-| Types/interfaces | `lib/types.ts` |
+| PDF generation | `lib/pdf-generator.tsx` |
+
+### StarChamber (Human vs Model)
+
+| Functionality | File |
+|---------------|------|
+| StarChamber page | `app/(experiments)/starchamber/page.tsx` |
+| Experiment control | `lib/starchamber/manager.ts` |
+| System presets | `lib/starchamber/presets.ts` |
+| Setup form | `components/starchamber/setup-form.tsx` |
+| Conversation view | `components/starchamber/conversation.tsx` |
+| Metrics panel | `components/starchamber/metrics-panel.tsx` |
+| Report generation | `lib/starchamber/report-generator.ts` |
+| PDF generation | `lib/starchamber/pdf-generator.tsx` |
+
+### Shared
+
+| Functionality | File |
+|---------------|------|
+| App header/navigation | `components/layout/app-header.tsx` |
+| Experiments layout | `app/(experiments)/layout.tsx` |
+| Judge evaluation | `lib/judge-evaluator.ts` |
+| Content filtering | `lib/content-filter.ts` |
+| OpenRouter API | `lib/openrouter.ts` |
+| Thinking extractor | `lib/thinking-extractor.ts` |
+| WebSocket server | `server.js` |
+| WebSocket client | `hooks/useWebSocket.ts` |
+| WebSocket emission | `lib/websocket-manager.ts` |
+| Core types | `lib/core/types.ts` |
+| Arena types | `lib/types.ts` |
 
 ---
 

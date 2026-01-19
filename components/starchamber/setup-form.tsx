@@ -22,7 +22,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { 
-  Play, 
   User, 
   Bot, 
   FileText, 
@@ -33,7 +32,6 @@ import {
   Pencil,
   BarChart3,
   Info,
-  Square
 } from "lucide-react";
 import { SYSTEM_CONTEXT_PRESETS, DEFAULT_PRESET_ID, DEFAULT_RESEARCHER_PERSONA } from "@/lib/starchamber/presets";
 
@@ -63,18 +61,8 @@ interface StarChamberSetupFormProps {
   requestLogprobs: boolean;
   onRequestLogprobsChange: (request: boolean) => void;
   
-  // First message
-  firstMessage: string;
-  onFirstMessageChange: (message: string) => void;
-  
-  // Experiment control
+  // Experiment state (for disabling inputs during experiment)
   isExperimentRunning: boolean;
-  onStartExperiment: () => void;
-  onStopExperiment: () => void;
-  
-  // Report
-  hasCompletedExperiment: boolean;
-  onDownloadReport: () => void;
 }
 
 // ============ Icon Mapping ============
@@ -104,13 +92,7 @@ export function StarChamberSetupForm({
   onResearcherPersonaChange,
   requestLogprobs,
   onRequestLogprobsChange,
-  firstMessage,
-  onFirstMessageChange,
   isExperimentRunning,
-  onStartExperiment,
-  onStopExperiment,
-  hasCompletedExperiment,
-  onDownloadReport,
 }: StarChamberSetupFormProps) {
   
   // Handle preset change - update system context when preset changes
@@ -125,8 +107,6 @@ export function StarChamberSetupForm({
   // Check if current model might support logprobs
   const currentModel = availableModels.find(m => m.id === selectedModel);
   const modelMightSupportLogprobs = currentModel?.supportsLogprobs !== false;
-
-  const canStartExperiment = selectedModel && firstMessage.trim().length > 0;
 
   return (
     <div className="space-y-6">
@@ -299,63 +279,22 @@ export function StarChamberSetupForm({
         </CardContent>
       </Card>
 
-      {/* Start Experiment Card */}
-      <Card className={isExperimentRunning ? "border-green-500 bg-green-50/50" : ""}>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <FlaskConical className="w-5 h-5" />
-            {isExperimentRunning ? "Experiment Running" : "Start Experiment"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!isExperimentRunning && (
-            <div className="space-y-2">
-              <Label htmlFor="firstMessage">First Message</Label>
-              <Textarea
-                id="firstMessage"
-                placeholder="Enter your first message to the model..."
-                value={firstMessage}
-                onChange={(e) => onFirstMessageChange(e.target.value)}
-                className="min-h-[80px]"
-              />
-            </div>
-          )}
-
-          <div className="flex gap-2">
-            {!isExperimentRunning ? (
-              <Button 
-                onClick={onStartExperiment} 
-                disabled={!canStartExperiment}
-                className="flex-1"
-              >
-                <Play className="w-4 h-4 mr-2" />
-                Start Interrogation
-              </Button>
-            ) : (
-              <Button 
-                onClick={onStopExperiment} 
-                variant="destructive"
-                className="flex-1"
-              >
-                <Square className="w-4 h-4 mr-2" />
-                End Experiment
-              </Button>
-            )}
-            
-            {hasCompletedExperiment && !isExperimentRunning && (
-              <Button variant="outline" onClick={onDownloadReport}>
-                Download Report
-              </Button>
-            )}
-          </div>
-
-          {isExperimentRunning && (
-            <p className="text-sm text-muted-foreground text-center">
-              Type your messages in the conversation panel to continue →
+      {/* Experiment Status Card - Shows current experiment state */}
+      {isExperimentRunning && (
+        <Card className="border-green-500 bg-green-50/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <FlaskConical className="w-5 h-5 text-green-600" />
+              Experiment Active
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Use the conversation panel in the center to continue the interrogation.
             </p>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

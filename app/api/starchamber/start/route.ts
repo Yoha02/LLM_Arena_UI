@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { v4 as uuidv4 } from "uuid";
-import { getWebSocketManager } from "@/lib/websocket-manager";
+import WebSocketManager from "@/lib/websocket-manager";
 import { getStarChamberManager } from "@/lib/starchamber/manager";
 
 export async function POST(request: NextRequest) {
@@ -31,13 +30,29 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate experiment ID
-    const experimentId = `sc-${uuidv4()}`;
+    const experimentId = `sc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     // Get the StarChamber manager
     const manager = getStarChamberManager();
     
-    // Start the experiment
-    await manager.startExperiment({
+    // Broadcast experiment creation FIRST so clients can join the room
+    try {
+      const wsManager = WebSocketManager.getInstance();
+      wsManager.emitToAll("experiment_created", {
+        experimentId,
+        experimentType: "starchamber",
+        model,
+        systemContext,
+        researcherPersona,
+      });
+    } catch (e) {
+      console.warn("Could not broadcast experiment creation:", e);
+    }
+
+    // Return response immediately with experimentId
+    // Then start experiment processing asynchronously
+    // This allows frontend to join the WebSocket room before streaming begins
+    const experimentPromise = manager.startExperiment({
       experimentId,
       config: {
         experimentType: "starchamber",
@@ -49,16 +64,13 @@ export async function POST(request: NextRequest) {
       firstMessage: firstMessage.trim(),
     });
 
-    // Broadcast experiment creation
-    const wsManager = getWebSocketManager();
-    if (wsManager) {
-      wsManager.broadcastExperimentCreated(experimentId, {
-        experimentType: "starchamber",
-        model,
-        systemContext,
-        researcherPersona,
-      });
-    }
+    // Small delay to ensure experiment is initialized before response
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Don't await the full experiment - let it run in background
+    experimentPromise.catch(err => {
+      console.error("StarChamber experiment error:", err);
+    });
 
     return NextResponse.json({
       success: true,

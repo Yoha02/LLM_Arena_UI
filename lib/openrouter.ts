@@ -338,6 +338,8 @@ export class OpenRouterAPI {
       maxTokens?: number;
       temperature?: number;
       providerConfig?: ProviderConfig;
+      logprobs?: boolean;        // Request token logprobs
+      topLogprobs?: number;      // Number of top logprobs to return per token (max 20)
     } = {}
   ): Promise<any> {
     const modelConfig = MODEL_CONFIGS[model];
@@ -353,11 +355,17 @@ export class OpenRouterAPI {
       stream: true,
     };
 
+    // Add logprobs support if requested
+    // Note: Not all models support logprobs - it will be silently ignored if unsupported
+    if (options.logprobs) {
+      requestBody.logprobs = true;
+      requestBody.top_logprobs = options.topLogprobs || 5; // Default to top 5 alternatives
+    }
+
     // Add provider configuration if specified
     if (options.providerConfig) {
       requestBody.provider = options.providerConfig;
     }
-    // Remove provider configuration to avoid data policy issues
 
     try {
       const stream = await this.client.chat.completions.create(requestBody);

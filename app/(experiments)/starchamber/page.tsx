@@ -7,6 +7,7 @@ import { StarChamberMetricsPanel } from "@/components/starchamber/metrics-panel"
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { notifyConnectionChange, notifyExperimentChange } from "../layout";
 import { DEFAULT_PRESET_ID, DEFAULT_RESEARCHER_PERSONA } from "@/lib/starchamber/presets";
+import { StarChamberReportGenerator, type StarChamberReportData } from "@/lib/starchamber/report-generator";
 import type { 
   StarChamberMessage, 
   ModelMetrics, 
@@ -65,6 +66,11 @@ export default function StarChamberPage() {
 
   // ============ UI State ============
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [initialFirstMessage, setInitialFirstMessage] = useState("");
+  
+  // ============ Timing State (for reports) ============
+  const [experimentStartTime, setExperimentStartTime] = useState<Date | undefined>();
+  const [experimentEndTime, setExperimentEndTime] = useState<Date | undefined>();
   
   // ============ Refs ============
   const experimentIdRef = useRef<string | null>(null);
@@ -72,12 +78,11 @@ export default function StarChamberPage() {
   // ============ WebSocket Event Handlers ============
   
   const handleExperimentEvent = useCallback((event: ExperimentEvent) => {
-    console.log("📡 StarChamber event:", event.type, event.data);
-    
     switch (event.type) {
       case "experiment_started":
         setIsExperimentRunning(true);
         setWaitingForResearcher(false);
+        setExperimentStartTime(new Date());
         setExperimentStatus("Experiment started - sending first message...");
         break;
         
@@ -127,6 +132,7 @@ export default function StarChamberPage() {
         setIsModelResponding(false);
         setWaitingForResearcher(false);
         setHasCompletedExperiment(true);
+        setExperimentEndTime(new Date());
         setExperimentStatus("Experiment ended");
         break;
         
@@ -147,7 +153,6 @@ export default function StarChamberPage() {
   }, []);
 
   const handleExperimentCreated = useCallback((data: { experimentId: string }) => {
-    console.log("📢 StarChamber experiment created:", data.experimentId);
     setExperimentId(data.experimentId);
     experimentIdRef.current = data.experimentId;
   }, []);
@@ -217,7 +222,9 @@ export default function StarChamberPage() {
   // ============ Experiment Actions ============
   
   const startExperiment = async () => {
-    if (!selectedModel || !firstMessage.trim()) return;
+    if (!selectedModel || !firstMessage.trim()) {
+      return;
+    }
     
     setExperimentStatus("Starting experiment...");
     
@@ -249,6 +256,9 @@ export default function StarChamberPage() {
       experimentIdRef.current = data.experimentId;
       setIsExperimentRunning(true);
       setHasCompletedExperiment(false);
+      
+      // Save the initial first message for display
+      setInitialFirstMessage(firstMessage.trim());
       
       // Add the researcher's first message to conversation
       const researcherMessage: StarChamberMessage = {
@@ -335,10 +345,38 @@ export default function StarChamberPage() {
     }
   };
 
-  const handleDownloadReport = async () => {
-    // TODO: Implement report generation
-    console.log("Download report for experiment:", experimentId);
-    alert("Report generation coming soon!");
+  const handleDownloadReport = async (format: 'html' | 'pdf' = 'html') => {
+    if (!hasCompletedExperiment || !experimentId) {
+      console.warn('No completed experiment data available for download');
+      return;
+    }
+
+    try {
+      const reportData: StarChamberReportData = {
+        experimentId,
+        config: {
+          model: selectedModel,
+          modelDisplayName: getModelName(selectedModel),
+          systemContext,
+          presetId: selectedPreset,
+          researcherPersona,
+          requestLogprobs,
+        },
+        conversation,
+        metrics,
+        startTime: experimentStartTime,
+        endTime: experimentEndTime,
+      };
+
+      if (format === 'pdf') {
+        await StarChamberReportGenerator.generateAndDownloadPDF(reportData);
+      } else {
+        await StarChamberReportGenerator.generateAndDownloadHTML(reportData);
+      }
+    } catch (error) {
+      console.error('Failed to download StarChamber report:', error);
+      alert('Failed to generate report. Please try again.');
+    }
   };
 
   // ============ Get Model Name ============
@@ -351,9 +389,9 @@ export default function StarChamberPage() {
   // ============ Render ============
   
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-10 gap-6 lg:items-start">
       {/* Left Column - Setup */}
-      <div className="lg:col-span-3 space-y-6">
+      <div className="lg:col-span-3 space-y-6" id="starchamber-left-column">
         <StarChamberSetupForm
           availableModels={availableModels}
           isLoadingModels={isLoadingModels}
@@ -367,17 +405,11 @@ export default function StarChamberPage() {
           onResearcherPersonaChange={setResearcherPersona}
           requestLogprobs={requestLogprobs}
           onRequestLogprobsChange={setRequestLogprobs}
-          firstMessage={firstMessage}
-          onFirstMessageChange={setFirstMessage}
           isExperimentRunning={isExperimentRunning}
-          onStartExperiment={startExperiment}
-          onStopExperiment={stopExperiment}
-          hasCompletedExperiment={hasCompletedExperiment}
-          onDownloadReport={handleDownloadReport}
         />
       </div>
 
-      {/* Center Column - Conversation */}
+      {/* Center Column - Conversation (height matches left sidebar) */}
       <div className="lg:col-span-4">
         <StarChamberConversation
           conversation={conversation}
@@ -392,6 +424,15 @@ export default function StarChamberPage() {
           onSendMessage={sendMessage}
           isFullscreen={isFullscreen}
           onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+          // Experiment control props
+          firstMessage={firstMessage}
+          onFirstMessageChange={setFirstMessage}
+          canStartExperiment={!!(selectedModel && firstMessage.trim().length > 0)}
+          onStartExperiment={startExperiment}
+          onStopExperiment={stopExperiment}
+          hasCompletedExperiment={hasCompletedExperiment}
+          onDownloadReport={handleDownloadReport}
+          initialFirstMessage={initialFirstMessage}
         />
       </div>
 
