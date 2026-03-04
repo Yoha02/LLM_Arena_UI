@@ -15,6 +15,8 @@ export interface ModelConfig {
   maxTokens: number;
   supportsNativeThinking: boolean;
   thinkingExtractionMethod: 'native' | 'chain-of-thought' | 'structured' | 'generic';
+  /** If true, request reasoning tokens from OpenRouter (delta.reasoning) when supported */
+  requestReasoning?: boolean;
 }
 
 export interface ModelSelection {

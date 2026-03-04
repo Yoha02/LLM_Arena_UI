@@ -135,13 +135,14 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     thinkingExtractionMethod: 'chain-of-thought'
   },
   
-  // Google Gemma 3 27B (Free tier)
+  // Google Gemma 3 27B (OpenRouter; chain-of-thought + optional API reasoning)
   'gemma-3-27b': {
-    name: 'Gemma 3 27B Instruct (Free)',
-    openrouterName: 'google/gemma-3-27b-it:free',
+    name: 'Gemma 3 27B Instruct',
+    openrouterName: 'google/gemma-3-27b-it',
     maxTokens: 4096,
     supportsNativeThinking: false,
-    thinkingExtractionMethod: 'generic'
+    thinkingExtractionMethod: 'chain-of-thought',
+    requestReasoning: true,
   },
   
   // OpenAI OSS Models
@@ -354,6 +355,14 @@ export class OpenRouterAPI {
       temperature: options.temperature || 0.7,
       stream: true,
     };
+
+    // Request reasoning tokens when model supports it (e.g. Gemma 3, Gemini thinking)
+    if (modelConfig.requestReasoning) {
+      requestBody.reasoning = {
+        effort: 'medium',
+        exclude: false,
+      };
+    }
 
     // Add logprobs support if requested
     // Note: Not all models support logprobs - it will be silently ignored if unsupported
