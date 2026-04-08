@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { ChevronDown, ChevronRight, Brain, Filter } from "lucide-react"
+import { ChevronDown, ChevronRight, Brain, Filter, BarChart3 } from "lucide-react"
 import type { ChatMessage as ChatMessageType } from "@/app/page"
 
 interface ChatMessageProps {
@@ -14,6 +14,7 @@ interface ChatMessageProps {
 export function ChatMessage({ message }: ChatMessageProps) {
   const [isThinkingOpen, setIsThinkingOpen] = useState(false)
   const [isFilteredOpen, setIsFilteredOpen] = useState(false)
+  const [isLogprobsOpen, setIsLogprobsOpen] = useState(false)
 
   const modelColor = message.model === "A" ? "bg-blue-50 border-blue-200" : "bg-purple-50 border-purple-200"
   const modelBadgeColor = message.model === "A" ? "bg-blue-100 text-blue-800" : "bg-purple-100 text-purple-800"
@@ -80,6 +81,51 @@ export function ChatMessage({ message }: ChatMessageProps) {
                   Removed: {message.filterMetadata.removedSections.join(', ')}
                 </div>
               </div>
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+
+        {message.logprobs && (
+          <Collapsible open={isLogprobsOpen} onOpenChange={setIsLogprobsOpen} className="mt-3">
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="p-0 h-auto font-normal text-gray-600 hover:text-gray-800">
+                {isLogprobsOpen ? <ChevronDown className="w-4 h-4 mr-1" /> : <ChevronRight className="w-4 h-4 mr-1" />}
+                <BarChart3 className="w-4 h-4 mr-1" />
+                <span className="text-xs">
+                  Token Confidence {message.logprobs.available ? `(avg ${(message.logprobs.averageConfidence * 100).toFixed(1)}%)` : "(unavailable)"}
+                </span>
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-2">
+              {message.logprobs.available ? (
+                <div className="bg-cyan-50 border border-cyan-200 rounded-md p-3">
+                  <div className="text-xs text-cyan-800 mb-2">
+                    Tokens: {message.logprobs.tokens.length} • Low confidence (&lt;50%): {message.logprobs.lowConfidenceTokens.length}
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {message.logprobs.tokens.slice(0, 40).map((token, idx) => {
+                      const confidence = token.probability * 100
+                      const cls = confidence > 80 ? "bg-green-100 text-green-800" : confidence > 50 ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800"
+                      return (
+                        <span
+                          key={`${token.token}-${idx}`}
+                          className={`px-1.5 py-0.5 rounded text-[11px] font-mono ${cls}`}
+                          title={`p=${confidence.toFixed(1)}% | logprob=${token.logprob.toFixed(3)}`}
+                        >
+                          {token.token}
+                        </span>
+                      )
+                    })}
+                    {message.logprobs.tokens.length > 40 && (
+                      <span className="text-[11px] text-gray-500">...+{message.logprobs.tokens.length - 40} more</span>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500 bg-gray-50 border rounded-md p-2">
+                  Logprobs were requested but not returned by the provider/model.
+                </div>
+              )}
             </CollapsibleContent>
           </Collapsible>
         )}

@@ -188,6 +188,29 @@ export class ExperimentReportGenerator {
         </div>
       </div>` : '';
 
+    const logprobsSection = message.logprobs
+      ? (message.logprobs.available
+          ? `
+      <div class="logprobs-section">
+        <button class="thinking-toggle" onclick="toggleThinking('logprobs-${message.id}')">
+          <span class="toggle-icon">▶</span> 📊 Token Confidence (Avg: ${(message.logprobs.averageConfidence * 100).toFixed(1)}%)
+        </button>
+        <div class="thinking-content" id="thinking-logprobs-${message.id}" style="display: none;">
+          <div class="message-tokens">Total tokens: ${message.logprobs.tokens.length} | Low confidence: ${message.logprobs.lowConfidenceTokens.length}</div>
+          <pre>${this.escapeHtml(
+            message.logprobs.tokens
+              .slice(0, 60)
+              .map((t: any) => `${t.token} | p=${(t.probability * 100).toFixed(1)}% | logprob=${t.logprob.toFixed(4)}`)
+              .join('\n')
+          )}</pre>
+        </div>
+      </div>`
+          : `
+      <div class="no-thinking">
+        <span class="thinking-badge">Logprobs requested but unavailable</span>
+      </div>`)
+      : '';
+
     return `
     <div class="message ${modelClass}">
         <div class="message-header">
@@ -205,6 +228,7 @@ export class ExperimentReportGenerator {
         </div>
         
         ${filterSection}
+        ${logprobsSection}
         
         ${message.tokensUsed ? `<div class="message-tokens">Tokens: ${message.tokensUsed}</div>` : ''}
     </div>`;

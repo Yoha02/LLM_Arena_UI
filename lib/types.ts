@@ -11,6 +11,7 @@ export interface ExperimentConfig {
   modelB: string
   apiKeyA?: string // Optional - uses environment variable if not provided
   apiKeyB?: string // Optional - uses environment variable if not provided
+  requestLogprobs?: boolean // Experimental Together logprobs toggle
 }
 
 export interface ChatMessage {
@@ -31,6 +32,27 @@ export interface ChatMessage {
     filterConfidence: number   // 0-1 confidence
     filterReasoning: string    // Why filter made this decision
   }
+
+  // Experimental Together token-level confidence
+  logprobs?: LogprobsData
+}
+
+export interface TokenLogprob {
+  token: string
+  logprob: number
+  probability: number
+  topAlternatives?: Array<{
+    token: string
+    logprob: number
+    probability: number
+  }>
+}
+
+export interface LogprobsData {
+  available: boolean
+  tokens: TokenLogprob[]
+  averageConfidence: number
+  lowConfidenceTokens: TokenLogprob[]
 }
 
 export interface SentimentData {

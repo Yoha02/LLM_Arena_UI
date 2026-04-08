@@ -6,10 +6,12 @@ import {
   SentimentData 
 } from './types';
 import { OpenRouterAPI } from './openrouter';
+import { TogetherAPI } from './together';
 import { thinkingExtractor } from './thinking-extractor';
 import WebSocketManager, { ExperimentEvent, StreamingMessage } from './websocket-manager';
 import { JudgeEvaluator } from './judge-evaluator';
 import { ContentFilter, FilterResult } from './content-filter';
+import { isTogetherModel } from './model-registry';
 
 // Global singleton registry that persists across module contexts
 declare global {
@@ -20,6 +22,8 @@ export class ExperimentManager {
   private state: ExperimentState;
   private openrouterA: OpenRouterAPI;
   private openrouterB: OpenRouterAPI;
+  private togetherA: TogetherAPI;
+  private togetherB: TogetherAPI;
   private config: ExperimentConfig | null = null;
   private isProcessingTurn: boolean = false;
   private turnTimeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -66,6 +70,8 @@ export class ExperimentManager {
     // Initialize OpenRouter clients (will be configured with API keys later)
     this.openrouterA = new OpenRouterAPI();
     this.openrouterB = new OpenRouterAPI();
+    this.togetherA = new TogetherAPI();
+    this.togetherB = new TogetherAPI();
     
     // Initialize judge evaluator
     this.judgeEvaluator = new JudgeEvaluator();
@@ -134,6 +140,8 @@ export class ExperimentManager {
     // Initialize OpenRouter clients with the provided API keys
     this.openrouterA = new OpenRouterAPI(config.apiKeyA);
     this.openrouterB = new OpenRouterAPI(config.apiKeyB);
+    this.togetherA = new TogetherAPI(config.apiKeyA);
+    this.togetherB = new TogetherAPI(config.apiKeyB);
     
     // Configure judge evaluator with API key (use same as Model A)
     this.judgeEvaluator.updateApiKey(config.apiKeyA);
@@ -914,7 +922,10 @@ async stopExperiment(): Promise<void> {
       throw new Error('No experiment configuration available');
     }
 
-    const openrouterClient = model === 'A' ? this.openrouterA : this.openrouterB;
+    const useTogether = isTogetherModel(modelName);
+    const modelClient = useTogether
+      ? (model === 'A' ? this.togetherA : this.togetherB)
+      : (model === 'A' ? this.openrouterA : this.openrouterB);
     const isFirstTurn = this.state.currentTurn === 0;
     
     // Build conversation history for this model
@@ -949,12 +960,14 @@ async stopExperiment(): Promise<void> {
       this.wsManager.emitStreamingMessage(this.experimentId, streamingMessage);
 
       // Make streaming API call to OpenRouter with extended timeout
-      const stream = await openrouterClient.streamChatCompletion(
+      const stream = await modelClient.streamChatCompletion(
         modelName,
         conversationHistory,
         {
           temperature: 0.7,
-          maxTokens: 6144 // Increased for longer responses
+          maxTokens: 6144, // Increased for longer responses
+          logprobs: Boolean(this.config.requestLogprobs && useTogether),
+          topLogprobs: 5
         }
       );
 
@@ -963,6 +976,11 @@ async stopExperiment(): Promise<void> {
       let chunkCount = 0;
       let lastEmitTime = Date.now();
       const THROTTLE_MS = 100; // Emit updates at most every 100ms
+      const collectedLogprobs: Array<{
+        token: string;
+        logprob: number;
+        top_logprobs?: Array<{ token: string; logprob: number }>;
+      }> = [];
       
       console.log(`Starting streaming for Model ${model} (${modelName}) on instance ${this.instanceId} - Stop flag: ${this.manualStopRequested}`);
 
@@ -1070,6 +1088,17 @@ async stopExperiment(): Promise<void> {
             deltaKeys: chunk.choices?.[0]?.delta ? Object.keys(chunk.choices[0].delta) : [],
             hasReasoning: !!chunk.choices?.[0]?.delta?.reasoning
           });
+        }
+
+        // Collect per-token logprobs for Together experiments when enabled.
+        if (this.config.requestLogprobs && chunk.choices?.[0]?.logprobs?.content) {
+          for (const tokenInfo of chunk.choices[0].logprobs.content) {
+            collectedLogprobs.push({
+              token: tokenInfo.token,
+              logprob: tokenInfo.logprob,
+              top_logprobs: tokenInfo.top_logprobs
+            });
+          }
         }
         
         // Store the full response for processing
@@ -1285,6 +1314,37 @@ async stopExperiment(): Promise<void> {
       }
 
       // Create chat message with BOTH original and filtered content
+      const logprobsData: ChatMessage['logprobs'] = this.config.requestLogprobs
+        ? (collectedLogprobs.length > 0
+            ? {
+                available: true,
+                tokens: collectedLogprobs.map((item) => ({
+                  token: item.token,
+                  logprob: item.logprob,
+                  probability: Math.exp(item.logprob),
+                  topAlternatives: item.top_logprobs?.map((alt) => ({
+                    token: alt.token,
+                    logprob: alt.logprob,
+                    probability: Math.exp(alt.logprob)
+                  }))
+                })),
+                averageConfidence: 0,
+                lowConfidenceTokens: []
+              }
+            : {
+                available: false,
+                tokens: [],
+                averageConfidence: 0,
+                lowConfidenceTokens: []
+              })
+        : undefined;
+
+      if (logprobsData?.tokens?.length) {
+        const totalProbability = logprobsData.tokens.reduce((sum, t) => sum + t.probability, 0);
+        logprobsData.averageConfidence = totalProbability / logprobsData.tokens.length;
+        logprobsData.lowConfidenceTokens = logprobsData.tokens.filter((t) => t.probability < 0.5);
+      }
+
       const chatMessage: ChatMessage = {
         id: `${model}-${this.state.currentTurn + 1}`,
         model,
@@ -1295,6 +1355,7 @@ async stopExperiment(): Promise<void> {
         thinking: finalThinking || undefined, // Don't use fallback messages
         timestamp: new Date(),
         tokensUsed,
+        logprobs: logprobsData,
         
         // Filter metadata for transparency
         filterMetadata: {

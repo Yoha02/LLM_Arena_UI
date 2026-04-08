@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createOpenRouterAPI, MODEL_CONFIGS } from '@/lib/openrouter';
+import { hasTogetherEquivalentModel, LOGPROBS_CLOSEST_ALTERNATIVE_ID } from '@/lib/together';
 
 // Force dynamic rendering since this route makes external API calls
 export const dynamic = 'force-dynamic';
@@ -9,19 +10,28 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl;
     const includeAvailable = searchParams.get('available') === 'true';
     
-    // Get our configured models
-    const configuredModels = Object.entries(MODEL_CONFIGS).map(([key, config]) => ({
-      id: key,
-      name: config.name,
-      openrouterName: config.openrouterName,
-      maxTokens: config.maxTokens,
-      supportsNativeThinking: config.supportsNativeThinking,
-      thinkingExtractionMethod: config.thinkingExtractionMethod,
-      priority: key.includes('deepseek') ? 1 : 
-                key.includes('qwen') || key.includes('kimi') || key.includes('minimax') || key.includes('glm') ? 2 : 
-                key.includes('gemini') ? 2 :
-                key.includes('llama') ? 3 : 4
-    }));
+    // Single model list for UI; provider is selected at runtime in StarChamber
+    const configuredModels = Object.entries(MODEL_CONFIGS).map(([id, config]) => {
+      const supportsLogprobs = hasTogetherEquivalentModel(id);
+      const altId = !supportsLogprobs ? LOGPROBS_CLOSEST_ALTERNATIVE_ID[id] : undefined;
+      const altConfig = altId ? MODEL_CONFIGS[altId] : undefined;
+      return {
+        id,
+        name: config.name,
+        provider: 'openrouter',
+        openrouterName: config.openrouterName,
+        maxTokens: config.maxTokens,
+        supportsNativeThinking: config.supportsNativeThinking,
+        supportsLogprobs,
+        logprobsAlternativeId: altId ?? null,
+        logprobsAlternativeName: altConfig?.name ?? null,
+        thinkingExtractionMethod: config.thinkingExtractionMethod,
+        priority: id.includes('deepseek') ? 1 : 
+                  id.includes('qwen') || id.includes('kimi') || id.includes('minimax') || id.includes('glm') ? 2 : 
+                  id.includes('gemini') ? 2 :
+                  id.includes('llama') ? 3 : 4
+      };
+    });
 
     let response: any = {
       status: 'success',

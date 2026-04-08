@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Play, Square, ChevronDown, ChevronRight, Settings } from "lucide-react"
@@ -26,6 +27,8 @@ interface ExperimentSetupProps {
   onPromptBChange: (prompt: string) => void
   maxTurns: number
   onMaxTurnsChange: (turns: number) => void
+  requestLogprobs: boolean
+  onRequestLogprobsChange: (enabled: boolean) => void
   canStartExperiment: boolean
   isExperimentRunning: boolean
   onStartExperiment: () => void
@@ -51,6 +54,8 @@ export function ExperimentSetup({
   onPromptBChange,
   maxTurns,
   onMaxTurnsChange,
+  requestLogprobs,
+  onRequestLogprobsChange,
   canStartExperiment,
   isExperimentRunning,
   onStartExperiment,
@@ -286,6 +291,23 @@ export function ExperimentSetup({
               </Label>
             </div>
           </div>
+        </div>
+
+        <div className="flex items-center justify-between rounded-md border p-3">
+          <div>
+            <Label htmlFor="request-logprobs" className="text-sm font-medium">
+              Enable Token Logprobs (Experimental)
+            </Label>
+            <p className="text-xs text-gray-600 mt-1">
+              Uses Together provider path for supported experimental models.
+            </p>
+          </div>
+          <Switch
+            id="request-logprobs"
+            checked={requestLogprobs}
+            onCheckedChange={onRequestLogprobsChange}
+            disabled={isExperimentRunning}
+          />
         </div>
 
         <div className="flex gap-2">

@@ -21,7 +21,10 @@ interface ModelOption {
   id: string;
   name: string;
   openrouterName: string;
+  provider?: "openrouter" | "together";
   supportsLogprobs?: boolean;
+  logprobsAlternativeId?: string | null;
+  logprobsAlternativeName?: string | null;
 }
 
 // ============ Page Component ============

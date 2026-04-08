@@ -10,7 +10,7 @@ import { useWebSocket } from "@/hooks/useWebSocket"
 import { ExperimentEvent, StreamingMessage } from "@/lib/websocket-manager"
 import { ExperimentReportGenerator } from "@/lib/report-generator"
 import { notifyConnectionChange, notifyExperimentChange } from "../layout"
-import type { ExperimentConfig } from "@/lib/types"
+import type { ExperimentConfig, LogprobsData } from "@/lib/types"
 
 export interface ChatMessage {
   id: string
@@ -30,6 +30,7 @@ export interface ChatMessage {
     filterConfidence: number
     filterReasoning: string
   }
+  logprobs?: LogprobsData
 }
 
 export interface SentimentData {
@@ -53,9 +54,13 @@ export interface ModelMetrics {
 interface ModelOption {
   id: string
   name: string
+  provider?: "openrouter" | "together"
   openrouterName: string
   maxTokens: number
   supportsNativeThinking: boolean
+  supportsLogprobs?: boolean
+  logprobsAlternativeId?: string | null
+  logprobsAlternativeName?: string | null
   thinkingExtractionMethod: string
   priority: number
 }
@@ -68,6 +73,7 @@ export default function LLMArena() {
   const [promptA, setPromptA] = useState("")
   const [promptB, setPromptB] = useState("")
   const [maxTurns, setMaxTurns] = useState(5)
+  const [requestLogprobs, setRequestLogprobs] = useState(false)
   const [isExperimentRunning, setIsExperimentRunning] = useState(false)
   const [conversation, setConversation] = useState<ChatMessage[]>([])
 
@@ -641,7 +647,8 @@ export default function LLMArena() {
         promptB: promptingMode === 'individual' ? promptB : undefined,
         maxTurns,
         modelA,
-        modelB
+        modelB,
+        requestLogprobs
       };
 
       await ExperimentReportGenerator.generateAndDownloadHTML({
@@ -675,7 +682,8 @@ export default function LLMArena() {
         promptB: promptingMode === 'individual' ? promptB : undefined,
         maxTurns,
         modelA,
-        modelB
+        modelB,
+        requestLogprobs
       };
 
       await ExperimentReportGenerator.generateAndDownloadPDF({
@@ -719,7 +727,8 @@ export default function LLMArena() {
       promptB: promptingMode === 'individual' ? promptB : undefined,
       maxTurns,
       modelA,
-      modelB
+      modelB,
+      requestLogprobs
     }
     setLastExperimentData({
       config: reportConfig,
@@ -755,6 +764,7 @@ export default function LLMArena() {
       promptB: promptingMode === "individual" ? promptB : null,
       apiKeyA: apiKeyA === "default" ? undefined : apiKeyA, // Let backend use env variable if default
       apiKeyB: apiKeyB === "default" ? undefined : apiKeyB, // Let backend use env variable if default
+      requestLogprobs,
     }
 
     try {
@@ -1033,6 +1043,8 @@ export default function LLMArena() {
               onPromptBChange={setPromptB}
               maxTurns={maxTurns}
               onMaxTurnsChange={setMaxTurns}
+              requestLogprobs={requestLogprobs}
+              onRequestLogprobsChange={setRequestLogprobs}
               canStartExperiment={canStartExperiment()}
               isExperimentRunning={isExperimentRunning}
               onStartExperiment={startExperiment}

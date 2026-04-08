@@ -4,6 +4,7 @@
 // ============================================================================
 
 import { OpenRouterAPI } from "../openrouter";
+import { TogetherAPI } from "../together";
 import { thinkingExtractor } from "../thinking-extractor";
 import WebSocketManager, { ExperimentEvent, StreamingMessage } from "../websocket-manager";
 import { JudgeEvaluator } from "../judge-evaluator";
@@ -15,6 +16,7 @@ import type {
   LogprobsData,
   TokenLogprob,
 } from "../core/types";
+import { hasTogetherEquivalentModel } from "../together";
 
 // ============ Global Singleton ============
 
@@ -47,6 +49,7 @@ interface StartExperimentParams {
 export class StarChamberManager {
   private experiments: Map<string, StarChamberState> = new Map();
   private openrouterClients: Map<string, OpenRouterAPI> = new Map();
+  private togetherClients: Map<string, TogetherAPI> = new Map();
   private wsManager: WebSocketManager;
   private judgeEvaluator: JudgeEvaluator;
   private instanceId: string;
@@ -65,6 +68,8 @@ export class StarChamberManager {
     // Create OpenRouter client for this experiment
     const openrouterClient = new OpenRouterAPI(config.model.apiKey);
     this.openrouterClients.set(experimentId, openrouterClient);
+    const togetherClient = new TogetherAPI(config.model.apiKey);
+    this.togetherClients.set(experimentId, togetherClient);
 
     // Initialize conversation with system context
     const conversationHistory: Array<{ role: string; content: string }> = [];
@@ -172,8 +177,19 @@ export class StarChamberManager {
     if (!openrouterClient) {
       throw new Error(`OpenRouter client not found for experiment ${experimentId}`);
     }
+    const togetherClient = this.togetherClients.get(experimentId);
+    if (!togetherClient) {
+      throw new Error(`Together client not found for experiment ${experimentId}`);
+    }
 
     const modelName = state.config.model.modelId;
+    const useTogether = state.config.requestLogprobs && hasTogetherEquivalentModel(modelName);
+    console.log("🔀 StarChamber provider routing:", {
+      modelName,
+      requestLogprobs: state.config.requestLogprobs,
+      hasTogetherEquivalent: hasTogetherEquivalentModel(modelName),
+      useTogether,
+    });
     
     // Create streaming message for real-time updates
     const streamingMessage: StreamingMessage = {
@@ -195,17 +211,83 @@ export class StarChamberManager {
       // Emit initial streaming message
       this.wsManager.emitStreamingMessage(experimentId, streamingMessage);
 
-      // Make streaming API call with optional logprobs
-      const stream = await openrouterClient.streamChatCompletion(
-        modelName,
-        state.conversationHistory,
-        {
-          temperature: 0.7,
-          maxTokens: 6144,
-          logprobs: state.config.requestLogprobs,
-          topLogprobs: 5, // Get top 5 alternatives per token
+      // Together logprobs are more reliable in non-stream mode.
+      if (useTogether && state.config.requestLogprobs) {
+        const response = await togetherClient.chatCompletion(
+          modelName,
+          state.conversationHistory,
+          {
+            temperature: 0.7,
+            maxTokens: 6144,
+            logprobs: true,
+            topLogprobs: 5,
+          }
+        );
+
+        const rawContent = response?.choices?.[0]?.message?.content || "";
+        const { content: finalContent, thinking: extractedThinking } =
+          thinkingExtractor.extractThinkingFromStream(rawContent);
+        const finalThinking = (response?.choices?.[0]?.message as any)?.reasoning || extractedThinking;
+        const rawLogprobs =
+          response?.choices?.[0]?.logprobs ||
+          (response?.choices?.[0]?.message as any)?.logprobs;
+        const logprobsData = this.processLogprobs(rawLogprobs);
+        console.log("📊 StarChamber Together logprobs:", {
+          modelName,
+          available: logprobsData.available,
+          tokenCount: logprobsData.tokens.length,
+          rawKeys: rawLogprobs ? Object.keys(rawLogprobs) : [],
+        });
+        const estimatedTokens = response?.usage?.total_tokens || Math.ceil(finalContent.length / 4);
+
+        streamingMessage.content = finalContent;
+        streamingMessage.thinking = finalThinking || "";
+        streamingMessage.isComplete = true;
+        this.wsManager.emitStreamingMessage(experimentId, streamingMessage);
+
+        const modelMessage: StarChamberMessage = {
+          id: `sc-model-${Date.now()}`,
+          role: "model",
+          senderName: state.config.model.modelName || modelName,
+          content: finalContent,
+          thinking: finalThinking || undefined,
+          turnNumber: state.currentTurn,
+          timestamp: new Date(),
+          tokensUsed: estimatedTokens,
+          logprobs: logprobsData,
+        };
+
+        state.conversation.push(modelMessage);
+        state.conversationHistory.push({
+          role: "assistant",
+          content: finalContent,
+        });
+        state.metrics.tokensUsed += estimatedTokens;
+        state.metrics.turnsCompleted = state.currentTurn;
+
+        if (logprobsData.available) {
+          const prevAvg = state.metrics.averageLogprobConfidence || 0;
+          const prevCount = state.metrics.turnsCompleted - 1;
+          state.metrics.averageLogprobConfidence =
+            (prevAvg * prevCount + logprobsData.averageConfidence) / state.metrics.turnsCompleted;
         }
-      );
+
+        this.emitEvent(experimentId, "model_response_complete", {
+          turnNumber: state.currentTurn,
+          modelName: state.config.model.modelName || modelName,
+          message: modelMessage,
+        });
+        this.evaluateModelResponse(experimentId, modelMessage, state);
+        return;
+      }
+
+      // Default path: OpenRouter streaming with optional logprobs
+      const stream = await openrouterClient.streamChatCompletion(modelName, state.conversationHistory, {
+        temperature: 0.7,
+        maxTokens: 6144,
+        logprobs: state.config.requestLogprobs,
+        topLogprobs: 5,
+      });
 
       // Process the stream properly using for-await
       let fullContent = '';
@@ -420,40 +502,75 @@ export class StarChamberManager {
   // ============ Logprobs Processing ============
 
   private processLogprobs(rawLogprobs: any): LogprobsData {
-    if (!rawLogprobs?.content || !Array.isArray(rawLogprobs.content)) {
-      return { available: false, tokens: [], averageConfidence: 0, lowConfidenceTokens: [] };
-    }
+    // OpenAI-compatible content array format:
+    // { content: [{ token, logprob, top_logprobs? }] }
+    if (rawLogprobs?.content && Array.isArray(rawLogprobs.content)) {
+      const tokens: TokenLogprob[] = rawLogprobs.content.map((item: any) => {
+        const probability = Math.exp(item.logprob);
+        
+        const topAlternatives = item.top_logprobs?.map((alt: any) => ({
+          token: alt.token,
+          logprob: alt.logprob,
+          probability: Math.exp(alt.logprob),
+        }));
 
-    const tokens: TokenLogprob[] = rawLogprobs.content.map((item: any) => {
-      const probability = Math.exp(item.logprob);
-      
-      const topAlternatives = item.top_logprobs?.map((alt: any) => ({
-        token: alt.token,
-        logprob: alt.logprob,
-        probability: Math.exp(alt.logprob),
-      }));
+        return {
+          token: item.token,
+          logprob: item.logprob,
+          probability,
+          topAlternatives,
+        };
+      });
+
+      const totalProb = tokens.reduce((sum, t) => sum + t.probability, 0);
+      const averageConfidence = tokens.length > 0 ? totalProb / tokens.length : 0;
+      const lowConfidenceTokens = tokens.filter(t => t.probability < 0.5);
 
       return {
-        token: item.token,
-        logprob: item.logprob,
-        probability,
-        topAlternatives,
+        available: true,
+        tokens,
+        averageConfidence,
+        lowConfidenceTokens,
       };
-    });
+    }
 
-    // Calculate average confidence
-    const totalProb = tokens.reduce((sum, t) => sum + t.probability, 0);
-    const averageConfidence = tokens.length > 0 ? totalProb / tokens.length : 0;
+    // Alternate format seen in some providers:
+    // { tokens: string[], token_logprobs: number[], top_logprobs?: object[] }
+    if (Array.isArray(rawLogprobs?.tokens) && Array.isArray(rawLogprobs?.token_logprobs)) {
+      const tokens: TokenLogprob[] = rawLogprobs.tokens.map((token: string, i: number) => {
+        const logprob = Number(rawLogprobs.token_logprobs[i]);
+        const probability = Math.exp(logprob);
+        const tops = Array.isArray(rawLogprobs.top_logprobs) ? rawLogprobs.top_logprobs[i] : undefined;
 
-    // Find low confidence tokens (< 50% probability)
-    const lowConfidenceTokens = tokens.filter(t => t.probability < 0.5);
+        const topAlternatives = tops && typeof tops === "object"
+          ? Object.entries(tops).map(([altToken, altLogprob]) => ({
+              token: altToken,
+              logprob: Number(altLogprob),
+              probability: Math.exp(Number(altLogprob)),
+            }))
+          : undefined;
 
-    return {
-      available: true,
-      tokens,
-      averageConfidence,
-      lowConfidenceTokens,
-    };
+        return {
+          token,
+          logprob,
+          probability,
+          topAlternatives,
+        };
+      });
+
+      const totalProb = tokens.reduce((sum, t) => sum + t.probability, 0);
+      const averageConfidence = tokens.length > 0 ? totalProb / tokens.length : 0;
+      const lowConfidenceTokens = tokens.filter(t => t.probability < 0.5);
+
+      return {
+        available: true,
+        tokens,
+        averageConfidence,
+        lowConfidenceTokens,
+      };
+    }
+
+    return { available: false, tokens: [], averageConfidence: 0, lowConfidenceTokens: [] };
   }
 
   // ============ Helper Methods ============

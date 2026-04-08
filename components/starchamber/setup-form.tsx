@@ -42,6 +42,8 @@ interface ModelOption {
   name: string;
   openrouterName: string;
   supportsLogprobs?: boolean;
+  logprobsAlternativeId?: string | null;
+  logprobsAlternativeName?: string | null;
 }
 
 interface StarChamberSetupFormProps {
@@ -104,9 +106,8 @@ export function StarChamberSetupForm({
     }
   };
 
-  // Check if current model might support logprobs
   const currentModel = availableModels.find(m => m.id === selectedModel);
-  const modelMightSupportLogprobs = currentModel?.supportsLogprobs !== false;
+  const logprobsSupportedForModel = currentModel?.supportsLogprobs === true;
 
   return (
     <div className="space-y-6">
@@ -131,10 +132,18 @@ export function StarChamberSetupForm({
               </SelectTrigger>
               <SelectContent>
                 {availableModels.map((model) => (
-                  <SelectItem key={model.id} value={model.id}>
-                    <span className="flex items-center gap-2">
-                      {model.name}
-                    </span>
+                  <SelectItem key={model.id} value={model.id} className="items-start">
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span>{model.name}</span>
+                      {model.supportsLogprobs === false && (
+                        <span className="text-[10px] text-muted-foreground font-normal leading-tight">
+                          No token logprobs
+                          {model.logprobsAlternativeName ? (
+                            <> · Closest: {model.logprobsAlternativeName}</>
+                          ) : null}
+                        </span>
+                      )}
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -150,7 +159,13 @@ export function StarChamberSetupForm({
                   Request Token Logprobs
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Get confidence scores for each token (model-dependent)
+                  {!currentModel
+                    ? 'Get confidence scores per token when this option is on (requires a Together-backed model).'
+                    : logprobsSupportedForModel
+                      ? 'Get confidence scores per token via Together when this option is on.'
+                      : currentModel.logprobsAlternativeName
+                        ? `This model has no Together mapping for logprobs. Try ${currentModel.logprobsAlternativeName} for a similar option with logprobs.`
+                        : 'This model has no Together mapping; token logprobs will not be returned.'}
                 </p>
               </div>
             </div>
@@ -158,9 +173,9 @@ export function StarChamberSetupForm({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <div className="flex items-center gap-2">
-                    {!modelMightSupportLogprobs && (
-                      <Badge variant="outline" className="text-xs">
-                        May not be supported
+                    {currentModel && !logprobsSupportedForModel && (
+                      <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
+                        No logprobs
                       </Badge>
                     )}
                     <Switch

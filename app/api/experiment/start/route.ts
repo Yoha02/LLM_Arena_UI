@@ -68,7 +68,8 @@ export async function POST(request: NextRequest) {
       modelA: body.modelA,
       modelB: body.modelB,
       apiKeyA: body.apiKeyA || undefined, // Use environment variable if not provided
-      apiKeyB: body.apiKeyB || undefined  // Use environment variable if not provided
+      apiKeyB: body.apiKeyB || undefined,  // Use environment variable if not provided
+      requestLogprobs: Boolean(body.requestLogprobs)
     };
 
     // Start the experiment (this will broadcast the experiment ID immediately)

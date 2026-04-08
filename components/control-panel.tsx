@@ -11,9 +11,13 @@ import { Wrench, Phone } from "lucide-react"
 interface ModelOption {
   id: string
   name: string
+  provider?: "openrouter" | "together"
   openrouterName: string
   maxTokens: number
   supportsNativeThinking: boolean
+  supportsLogprobs?: boolean
+  logprobsAlternativeId?: string | null
+  logprobsAlternativeName?: string | null
   thinkingExtractionMethod: string
   priority: number
 }
@@ -72,12 +76,28 @@ export function ControlPanel({
             </SelectTrigger>
             <SelectContent>
               {modelOptions.map((option) => (
-                <SelectItem key={option.id} value={option.id}>
-                  <div className="flex items-center justify-between w-full">
-                    <span>{option.name}</span>
-                    {option.supportsNativeThinking && (
-                      <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                        Native Thinking
+                <SelectItem key={option.id} value={option.id} className="items-start">
+                  <div className="flex flex-col gap-1 w-full">
+                    <div className="flex items-start justify-between gap-2 w-full">
+                      <span className="font-medium">{option.name}</span>
+                      <div className="flex flex-shrink-0 gap-1 flex-wrap justify-end">
+                        {option.supportsLogprobs === false && (
+                          <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
+                            No logprobs
+                          </span>
+                        )}
+                        {option.supportsNativeThinking && (
+                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                            Native Thinking
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {option.supportsLogprobs === false && (
+                      <span className="text-[10px] text-muted-foreground font-normal leading-tight">
+                        {option.logprobsAlternativeName
+                          ? `Closest for logprobs: ${option.logprobsAlternativeName}`
+                          : "No Together path for token logprobs"}
                       </span>
                     )}
                   </div>
