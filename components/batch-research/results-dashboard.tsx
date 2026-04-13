@@ -11,6 +11,8 @@ import {
   CheckSquare, 
   AlertTriangle,
   MessageSquare,
+  Clock,
+  Brain,
 } from "lucide-react";
 import type { BatchResult } from "@/lib/starchamber/batch/types";
 
@@ -27,6 +29,10 @@ import {
 import { WordCloud, ModelWordCloud } from "./word-cloud";
 import { AnomaliesTab } from "./anomalies-tab";
 import { RunBrowser } from "./run-browser";
+import { TemporalTab } from "./temporal-chart";
+import { PCAChart } from "./pca-chart";
+import { ThinkingTraceTab } from "./thinking-trace-tab";
+import { DeepLogprobsTab } from "./logprobs-deep-tab";
 
 // ============ Types ============
 
@@ -34,7 +40,7 @@ interface ResultsDashboardProps {
   batch: BatchResult;
 }
 
-type TabId = "summary" | "heatmap" | "entropy" | "wordcloud" | "compliance" | "anomalies" | "runs";
+type TabId = "summary" | "heatmap" | "entropy" | "temporal" | "wordcloud" | "compliance" | "anomalies" | "thinking" | "runs";
 
 // ============ Tab Configuration ============
 
@@ -42,9 +48,11 @@ const TABS: Array<{ id: TabId; label: string; icon: React.ReactNode }> = [
   { id: "summary", label: "Summary", icon: <BarChart3 className="w-4 h-4" /> },
   { id: "heatmap", label: "Heatmap", icon: <Grid3X3 className="w-4 h-4" /> },
   { id: "entropy", label: "Entropy", icon: <Waves className="w-4 h-4" /> },
+  { id: "temporal", label: "Temporal", icon: <Clock className="w-4 h-4" /> },
   { id: "wordcloud", label: "WordCloud", icon: <Cloud className="w-4 h-4" /> },
   { id: "compliance", label: "Compliance", icon: <CheckSquare className="w-4 h-4" /> },
   { id: "anomalies", label: "Anomalies", icon: <AlertTriangle className="w-4 h-4" /> },
+  { id: "thinking", label: "Thinking", icon: <Brain className="w-4 h-4" /> },
   { id: "runs", label: "Runs", icon: <MessageSquare className="w-4 h-4" /> },
 ];
 
@@ -73,7 +81,7 @@ export function ResultsDashboard({ batch }: ResultsDashboardProps) {
   
   return (
     <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)} className="w-full">
-      <TabsList className="grid w-full grid-cols-7">
+      <TabsList className="grid w-full grid-cols-9">
         {TABS.map(tab => (
           <TabsTrigger key={tab.id} value={tab.id} className="flex items-center gap-2">
             {tab.icon}
@@ -132,6 +140,11 @@ export function ResultsDashboard({ batch }: ResultsDashboardProps) {
               maxValue={1}
             />
           )}
+          
+          {/* PCA Scatter Plot */}
+          {analysis.pca && (
+            <PCAChart pcaResult={analysis.pca} />
+          )}
         </div>
       </TabsContent>
       
@@ -155,7 +168,27 @@ export function ResultsDashboard({ batch }: ResultsDashboardProps) {
           
           {/* Turn-by-Turn Analysis */}
           <EntropyByTurnChart modelData={analysis.byModel} />
+          
+          {/* Deep Logprobs Analysis */}
+          {analysis.deepLogprobs && (
+            <DeepLogprobsTab analysis={analysis.deepLogprobs} />
+          )}
         </div>
+      </TabsContent>
+      
+      {/* Temporal Tab */}
+      <TabsContent value="temporal">
+        {analysis.temporal ? (
+          <TemporalTab temporalAnalysis={analysis.temporal} />
+        ) : (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <Clock className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium">No Temporal Data</h3>
+              <p className="text-muted-foreground">Per-turn metrics are not available for this batch</p>
+            </CardContent>
+          </Card>
+        )}
       </TabsContent>
       
       {/* Word Cloud Tab */}
@@ -187,6 +220,23 @@ export function ResultsDashboard({ batch }: ResultsDashboardProps) {
       {/* Anomalies Tab */}
       <TabsContent value="anomalies">
         <AnomaliesTab anomalies={analysis.anomalies} />
+      </TabsContent>
+      
+      {/* Thinking Traces Tab */}
+      <TabsContent value="thinking">
+        {analysis.thinkingTraces ? (
+          <ThinkingTraceTab analysis={analysis.thinkingTraces} />
+        ) : (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <Brain className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium">No Thinking Traces</h3>
+              <p className="text-muted-foreground">
+                Use reasoning models (DeepSeek-R1, QwQ) to capture thinking traces
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </TabsContent>
       
       {/* Runs Tab */}

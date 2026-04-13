@@ -347,7 +347,7 @@ function BatchPDFDocument({ batch }: BatchPDFDocumentProps) {
                     </View>
                     <View style={styles.metricItem}>
                       <Text style={styles.metricLabel}>First Token Entropy</Text>
-                      <Text style={styles.metricValue}>{model.firstTokenEntropy?.mean?.toFixed(3) || 'N/A'}</Text>
+                      <Text style={styles.metricValue}>{model.logprobs?.avgFirstTokenEntropy?.toFixed(3) || 'N/A'}</Text>
                     </View>
                   </View>
                 </View>

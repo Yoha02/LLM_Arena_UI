@@ -18,6 +18,7 @@ import type {
 } from '../types';
 import { detectOutliersZScore, descriptiveStats } from './statistics';
 import { calculateFirstTokenEntropy, detectEntropySpikes } from './entropy';
+import { detectSaysDoesMismatches, mismatchesToAnomalies } from './mismatch';
 
 // ============ Types ============
 
@@ -96,6 +97,11 @@ export function detectAnomalies(
   // 7. Keyword Emergence
   const keywordAnomalies = detectKeywordEmergence(batchResult.runs, generateId);
   anomalies.push(...keywordAnomalies);
+  
+  // 8. Says-vs-Does Mismatches
+  const mismatchSummary = detectSaysDoesMismatches(batchResult.runs);
+  const mismatchAnomalies = mismatchesToAnomalies(mismatchSummary, generateId);
+  anomalies.push(...mismatchAnomalies);
   
   // Build summary
   const summaryByType: Record<AnomalyType, number> = {

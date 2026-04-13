@@ -299,14 +299,12 @@ function MessageBubble({ message, index }: { message: BatchMessage; index: numbe
         </div>
         
         {/* Logprobs details */}
-        {message.logprobs && (
+        {message.logprobs?.available && (
           <div className="mt-1 text-xs text-muted-foreground flex gap-3">
-            {message.logprobs.firstTokenEntropy !== undefined && (
-              <span>First Token Entropy: {message.logprobs.firstTokenEntropy.toFixed(3)}</span>
+            {message.logprobs.tokens.length > 0 && (
+              <span>First Token: &ldquo;{message.logprobs.tokens[0]?.token}&rdquo; ({(message.logprobs.tokens[0]?.probability * 100).toFixed(1)}%)</span>
             )}
-            {message.logprobs.avgConfidence !== undefined && (
-              <span>Avg Confidence: {(message.logprobs.avgConfidence * 100).toFixed(1)}%</span>
-            )}
+            <span>Avg Confidence: {(message.logprobs.averageConfidence * 100).toFixed(1)}%</span>
           </div>
         )}
       </div>

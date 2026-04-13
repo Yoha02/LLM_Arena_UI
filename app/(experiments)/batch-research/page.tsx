@@ -32,6 +32,7 @@ import {
   CheckCircle2,
   XCircle,
   ChevronRight,
+  BookOpen,
 } from "lucide-react";
 import type { 
   BatchConfig, 
@@ -44,6 +45,7 @@ import type {
 import { ResultsDashboard } from "@/components/batch-research/results-dashboard";
 import { ExportPanel } from "@/components/batch-research/export-panel";
 import { ScriptEditorModal } from "@/components/batch-research/script-editor";
+import { ComparisonDashboard } from "@/components/batch-research/comparison-dashboard";
 import { notifyBatchStatusChange } from "../layout";
 
 // ============ Types ============
@@ -109,6 +111,11 @@ export default function BatchResearchPage() {
   
   // ============ Tab State ============
   const [activeTab, setActiveTab] = useState<"config" | "progress" | "results" | "history">("config");
+  
+  // ============ Comparison State ============
+  const [compareIds, setCompareIds] = useState<Set<string>>(new Set());
+  const [comparisonBatches, setComparisonBatches] = useState<BatchResult[] | null>(null);
+  const [isComparing, setIsComparing] = useState(false);
 
   // ============ Batch Status Notification ============
   
@@ -496,6 +503,28 @@ export default function BatchResearchPage() {
     setSelectedModels([]);
   };
 
+  const [downloadingGuide, setDownloadingGuide] = useState(false);
+
+  const handleDownloadGuide = async () => {
+    setDownloadingGuide(true);
+    try {
+      const { generateGuidePDF } = await import('@/lib/starchamber/batch/guide-pdf-generator');
+      const blob = await generateGuidePDF();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'Batch_Research_User_Guide.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to generate guide PDF:', err);
+    } finally {
+      setDownloadingGuide(false);
+    }
+  };
+
   // ============ Render ============
   
   return (
@@ -509,9 +538,20 @@ export default function BatchResearchPage() {
           </p>
         </div>
         
-        {currentBatch && (
-          <BatchStatusBadge status={currentBatch.status} />
-        )}
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDownloadGuide}
+            disabled={downloadingGuide}
+          >
+            <BookOpen className="w-4 h-4 mr-2" />
+            {downloadingGuide ? 'Generating...' : 'User Guide'}
+          </Button>
+          {currentBatch && (
+            <BatchStatusBadge status={currentBatch.status} />
+          )}
+        </div>
       </div>
       
       {/* Main Content Tabs */}
@@ -809,18 +849,65 @@ export default function BatchResearchPage() {
         
         {/* History Tab */}
         <TabsContent value="history">
-          <BatchHistoryPanel 
-            batches={batchHistory}
-            onSelectBatch={(batchId) => {
-              // Load batch details
-              fetch(`/api/batch/${batchId}/status`)
-                .then(res => res.json())
-                .then(batch => {
-                  setCurrentBatch(batch);
-                  setActiveTab(batch.analysis ? "results" : "progress");
-                });
-            }}
-          />
+          {comparisonBatches ? (
+            <ComparisonDashboard 
+              batches={comparisonBatches}
+              onClose={() => {
+                setComparisonBatches(null);
+                setCompareIds(new Set());
+              }}
+            />
+          ) : (
+            <div className="space-y-4">
+              {compareIds.size >= 2 && (
+                <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <span className="text-sm">{compareIds.size} experiments selected for comparison</span>
+                  <Button
+                    size="sm"
+                    disabled={isComparing}
+                    onClick={async () => {
+                      setIsComparing(true);
+                      try {
+                        const res = await fetch("/api/batch/compare", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ batchIds: Array.from(compareIds) }),
+                        });
+                        const data = await res.json();
+                        if (data.batches) setComparisonBatches(data.batches);
+                      } catch (e) {
+                        console.error("Compare failed:", e);
+                      } finally {
+                        setIsComparing(false);
+                      }
+                    }}
+                  >
+                    {isComparing ? "Loading..." : "Compare Selected"}
+                  </Button>
+                </div>
+              )}
+              <BatchHistoryPanel 
+                batches={batchHistory}
+                compareIds={compareIds}
+                onToggleCompare={(batchId) => {
+                  setCompareIds(prev => {
+                    const next = new Set(prev);
+                    if (next.has(batchId)) next.delete(batchId);
+                    else if (next.size < 4) next.add(batchId);
+                    return next;
+                  });
+                }}
+                onSelectBatch={(batchId) => {
+                  fetch(`/api/batch/${batchId}/status`)
+                    .then(res => res.json())
+                    .then(batch => {
+                      setCurrentBatch(batch);
+                      setActiveTab(batch.analysis ? "results" : "progress");
+                    });
+                }}
+              />
+            </div>
+          )}
         </TabsContent>
       </Tabs>
       
@@ -1019,10 +1106,14 @@ function BatchResultsPanel({ batch }: { batch: BatchResult }) {
 
 function BatchHistoryPanel({ 
   batches, 
-  onSelectBatch 
+  onSelectBatch,
+  compareIds,
+  onToggleCompare,
 }: { 
   batches: BatchSummary[];
   onSelectBatch: (batchId: string) => void;
+  compareIds?: Set<string>;
+  onToggleCompare?: (batchId: string) => void;
 }) {
   if (batches.length === 0) {
     return (
@@ -1053,9 +1144,16 @@ function BatchHistoryPanel({
               <div
                 key={batch.batchId}
                 className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted cursor-pointer"
-                onClick={() => onSelectBatch(batch.batchId)}
               >
-                <div className="space-y-1">
+                {onToggleCompare && (
+                  <Checkbox
+                    checked={compareIds?.has(batch.batchId) || false}
+                    onCheckedChange={() => onToggleCompare(batch.batchId)}
+                    className="mr-3"
+                    disabled={!compareIds?.has(batch.batchId) && (compareIds?.size || 0) >= 4}
+                  />
+                )}
+                <div className="flex-1 min-w-0" onClick={() => onSelectBatch(batch.batchId)}>
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{batch.scriptName}</span>
                     <BatchStatusBadge status={batch.status} />
@@ -1064,7 +1162,7 @@ function BatchHistoryPanel({
                     {batch.modelsCount} models • {batch.completedRuns}/{batch.totalRuns} runs
                   </p>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4" onClick={() => onSelectBatch(batch.batchId)}>
                   <div className="text-right">
                     <p className="text-xs text-muted-foreground">
                       {formatBatchDate(batch.created)}

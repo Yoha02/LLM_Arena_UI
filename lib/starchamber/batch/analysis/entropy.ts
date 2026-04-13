@@ -133,18 +133,64 @@ export function calculateCrossResponseEntropy(responses: string[]): number {
   return shannonEntropy(probabilities);
 }
 
+// ============ Thinking Token Detection ============
+
+const THINKING_TOKENS = new Set([
+  '<think>', '</think>', '<|thinking|>', '<|/thinking|>',
+  '<|begin_of_thought|>', '<|end_of_thought|>',
+  '<reasoning>', '</reasoning>',
+]);
+
+export function isThinkingToken(token: string): boolean {
+  const normalized = token.trim().toLowerCase();
+  if (THINKING_TOKENS.has(normalized)) return true;
+  if (/^<\|?(?:think|thinking|thought|reasoning)/.test(normalized)) return true;
+  return false;
+}
+
+export function findFirstContentTokenIndex(
+  logprobs: Array<{ token: string; logprob: number; topAlternatives?: Array<{ token: string; logprob: number }> }>
+): number {
+  let insideThinkingBlock = false;
+  let passedThinkingBlock = false;
+  for (let i = 0; i < logprobs.length; i++) {
+    const tok = logprobs[i].token.trim().toLowerCase();
+    if (tok === '<think>' || tok === '<|thinking|>' || tok === '<|begin_of_thought|>' || tok === '<reasoning>') {
+      insideThinkingBlock = true;
+      continue;
+    }
+    if (tok === '</think>' || tok === '<|/thinking|>' || tok === '<|end_of_thought|>' || tok === '</reasoning>') {
+      insideThinkingBlock = false;
+      passedThinkingBlock = true;
+      continue;
+    }
+    if (isThinkingToken(tok)) continue;
+    if (insideThinkingBlock) continue;
+    if (passedThinkingBlock && isWhitespaceToken(logprobs[i].token)) continue;
+    return i;
+  }
+  return 0;
+}
+
+function isWhitespaceToken(token: string): boolean {
+  return /^\s+$/.test(token) || token === '\n' || token === '\r\n' || token === '\t';
+}
+
 // ============ Logprobs Entropy Analysis ============
 
 /**
  * Calculate first-token entropy from logprobs
  * High entropy = model uncertainty about how to begin response
+ * Skips thinking-preamble tokens (<think>, etc.) to find real first content token
  */
 export function calculateFirstTokenEntropy(
   logprobs: Array<{ token: string; logprob: number; topAlternatives?: Array<{ token: string; logprob: number }> }>
 ): FirstTokenEntropyResult | null {
   if (!logprobs || logprobs.length === 0) return null;
   
-  const firstToken = logprobs[0];
+  const contentIdx = findFirstContentTokenIndex(logprobs);
+  const firstToken = logprobs[contentIdx];
+  if (!firstToken) return null;
   const topProb = Math.exp(firstToken.logprob);
   
   const alternatives = firstToken.topAlternatives || [];
@@ -177,26 +223,32 @@ export function detectEntropySpikes(
   if (!logprobs || logprobs.length < 5) return [];
   
   const entropies: number[] = [];
-  
-  for (const tokenData of logprobs) {
+  const indices: number[] = [];
+
+  for (let i = 0; i < logprobs.length; i++) {
+    if (isThinkingToken(logprobs[i].token)) continue;
+    const tokenData = logprobs[i];
     const alternatives = tokenData.topAlternatives || [];
     const probs = [Math.exp(tokenData.logprob), ...alternatives.map(a => Math.exp(a.logprob))];
     const sum = probs.reduce((s, p) => s + p, 0);
     const normalizedProbs = probs.map(p => p / sum);
     entropies.push(shannonEntropy(normalizedProbs));
+    indices.push(i);
   }
-  
+
+  if (entropies.length < 5) return [];
+
   const mean = entropies.reduce((s, e) => s + e, 0) / entropies.length;
   const std = Math.sqrt(entropies.reduce((s, e) => s + Math.pow(e - mean, 2), 0) / entropies.length);
-  
+
   const spikes: Array<{ position: number; token: string; entropy: number; baseline: number }> = [];
   
   for (let i = 0; i < entropies.length; i++) {
     const zScore = std > 0 ? (entropies[i] - mean) / std : 0;
     if (zScore > threshold) {
       spikes.push({
-        position: i,
-        token: logprobs[i].token,
+        position: indices[i],
+        token: logprobs[indices[i]].token,
         entropy: entropies[i],
         baseline: mean,
       });

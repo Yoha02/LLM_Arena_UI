@@ -26,6 +26,10 @@ import { getEmbeddingsService, EmbeddingsService } from './embeddings';
 import { getComplianceAnalyzer, ComplianceAnalyzer } from './compliance';
 import { runStatisticalAnalysis, descriptiveStats } from './statistics';
 import { detectAnomalies } from './anomaly';
+import { analyzeTemporalBehavior } from './temporal';
+import { computePCA } from './pca';
+import { analyzeThinkingTraces } from './thinking-trace';
+import { analyzeDeepLogprobs } from './logprobs-deep';
 
 // ============ Re-exports ============
 
@@ -34,6 +38,12 @@ export * from './embeddings';
 export * from './compliance';
 export * from './statistics';
 export * from './anomaly';
+export * from './llm-judge';
+export * from './temporal';
+export * from './mismatch';
+export * from './pca';
+export * from './thinking-trace';
+export * from './logprobs-deep';
 
 // ============ Types ============
 
@@ -90,9 +100,15 @@ export async function analyzeBatchResults(
     
     byModel[modelId] = modelAnalysis;
     
+    const perRunEntropy = runs.map(run => {
+      const modelMessages = run.conversation.filter(m => m.role === 'model').map(m => m.content);
+      if (modelMessages.length === 0) return 0;
+      return calculateCrossResponseEntropy(modelMessages);
+    });
+    
     modelMetrics[modelId] = {
       compliance: runs.map(r => r.compliance?.overallComplianceRate ?? 0),
-      entropy: [modelAnalysis.responseEntropy.mean],
+      entropy: perRunEntropy,
     };
   }
   
@@ -112,11 +128,50 @@ export async function analyzeBatchResults(
     anomalies = detectAnomalies(batchResult);
   }
   
+  const temporal = analyzeTemporalBehavior(batchResult.runs);
+
+  let pca = undefined;
+  if (opts.calculateEmbeddings && embeddingsService) {
+    try {
+      const allEmbeddings: number[][] = [];
+      const allLabels: Array<{ modelId: string; runIndex: number; label: string }> = [];
+      
+      for (const [modelId, runs] of Object.entries(runsByModel)) {
+        for (const run of runs.slice(0, 20)) {
+          const modelMsgs = run.conversation.filter(m => m.role === 'model');
+          if (modelMsgs.length > 0) {
+            const combined = modelMsgs.map(m => m.content).join(' ').slice(0, 500);
+            try {
+              const embedding = await embeddingsService.embed(combined);
+              if (embedding && embedding.length > 0) {
+                allEmbeddings.push(embedding);
+                allLabels.push({ modelId, runIndex: run.runIndex, label: `${modelId.split('/').pop()}-R${run.runIndex}` });
+              }
+            } catch { /* skip failed embeddings */ }
+          }
+        }
+      }
+      
+      if (allEmbeddings.length >= 3) {
+        pca = computePCA(allEmbeddings, allLabels) || undefined;
+      }
+    } catch (error) {
+      console.warn('PCA computation failed:', error);
+    }
+  }
+
+  const thinkingTraces = analyzeThinkingTraces(batchResult.runs);
+  const deepLogprobs = analyzeDeepLogprobs(batchResult.runs);
+
   return {
     byModel,
     crossModel,
     statistics,
     anomalies,
+    temporal,
+    pca,
+    thinkingTraces: thinkingTraces.totalTraces > 0 ? thinkingTraces : undefined,
+    deepLogprobs: deepLogprobs.modelsWithLogprobs.length > 0 ? deepLogprobs : undefined,
   };
 }
 
@@ -178,12 +233,12 @@ async function analyzeModel(
   };
   
   if (options.complianceMetrics) {
-    const complianceAnalyses = runs.map(run => 
-      complianceAnalyzer.analyzeConversation(run.conversation, directiveStepIds)
+    const complianceAnalyses = await Promise.all(
+      runs.map(run => complianceAnalyzer.analyzeConversation(run.conversation, directiveStepIds))
     );
     
-    for (const run of runs) {
-      run.compliance = complianceAnalyzer.analyzeConversation(run.conversation, directiveStepIds);
+    for (let i = 0; i < runs.length; i++) {
+      runs[i].compliance = complianceAnalyses[i];
     }
     
     compliance = complianceAnalyzer.aggregateCompliance(complianceAnalyses);
@@ -198,7 +253,10 @@ async function analyzeModel(
   if (runsWithLogprobs.length > 0) {
     const confidences: number[] = [];
     const firstTokenEntropies: number[] = [];
-    const complianceIntentScores: number[] = [];
+    const intentSignals: number[] = [];
+    
+    const complyTokenPrefixes = ['i', 'yes', 'certainly', 'of', 'sure', 'okay', 'understood', 'happy', 'glad', 'absolutely'];
+    const refuseTokenPrefixes = ['sorry', 'unfortunately', 'no', 'cannot', "can't", 'apolog', 'i\'m', 'regret'];
     
     for (const run of runsWithLogprobs) {
       for (const msg of run.conversation) {
@@ -208,18 +266,31 @@ async function analyzeModel(
           const ftEntropy = calculateFirstTokenEntropy(msg.logprobs.tokens);
           if (ftEntropy) {
             firstTokenEntropies.push(ftEntropy.entropy);
+            
+            const topToken = ftEntropy.topToken.toLowerCase().trim();
+            const topProb = ftEntropy.topTokenProbability;
+            const isComply = complyTokenPrefixes.some(p => topToken.startsWith(p));
+            const isRefuse = refuseTokenPrefixes.some(p => topToken.startsWith(p));
+            
+            if (isComply) intentSignals.push(topProb);
+            else if (isRefuse) intentSignals.push(-topProb);
+            else intentSignals.push(0);
           }
         }
       }
     }
     
     if (confidences.length > 0) {
+      const avgIntent = intentSignals.length > 0
+        ? intentSignals.reduce((s, v) => s + v, 0) / intentSignals.length
+        : 0;
+      
       logprobsAnalysis = {
         avgConfidence: confidences.reduce((s, c) => s + c, 0) / confidences.length,
         avgFirstTokenEntropy: firstTokenEntropies.length > 0
           ? firstTokenEntropies.reduce((s, e) => s + e, 0) / firstTokenEntropies.length
           : 0,
-        complianceIntentSignal: 0,
+        complianceIntentSignal: avgIntent,
       };
     }
   }
@@ -375,7 +446,7 @@ function calculateJudgeMetrics(runs: BatchRunResult[]): ModelAnalysis['judgeMetr
 /**
  * Run fast analysis without embeddings (for immediate feedback)
  */
-export function analyzeQuick(batchResult: BatchResult): Partial<BatchAnalysis> {
+export async function analyzeQuick(batchResult: BatchResult): Promise<Partial<BatchAnalysis>> {
   const runsByModel = groupRunsByModel(batchResult.runs);
   const models = Object.keys(runsByModel);
   
@@ -394,10 +465,12 @@ export function analyzeQuick(batchResult: BatchResult): Partial<BatchAnalysis> {
       calculateCrossResponseEntropy(responses)
     );
     
-    const complianceAnalyses = runs.map(run => 
-      complianceAnalyzer.analyzeConversation(
-        run.conversation,
-        batchResult.config.script.sequence.map(s => s.id)
+    const complianceAnalyses = await Promise.all(
+      runs.map(run => 
+        complianceAnalyzer.analyzeConversation(
+          run.conversation,
+          batchResult.config.script.sequence.map(s => s.id)
+        )
       )
     );
     

@@ -107,6 +107,14 @@ export interface BatchResult {
   };
   
   error?: string;
+  
+  metadata?: {
+    platformVersion: string;
+    scriptHash: string;
+    apiProvider: string;
+    executionParams: Record<string, any>;
+    timestamp: string;
+  };
 }
 
 export interface BatchProgress {
@@ -150,6 +158,15 @@ export interface BatchMessage {
   stepId?: string;
 }
 
+export interface TurnMetric {
+  turn: number;
+  confidence?: number;
+  firstTokenEntropy?: number;
+  sentiment: 'positive' | 'negative' | 'neutral';
+  cooperationScore: number;
+  responseLength: number;
+}
+
 export interface RunMetrics {
   tokensUsed: number;
   turnsCompleted: number;
@@ -158,6 +175,7 @@ export interface RunMetrics {
   sentiment: SentimentData[];
   avgConfidence?: number;
   firstTokenEntropy?: number;
+  perTurnMetrics: TurnMetric[];
 }
 
 // ============ Analysis Types ============
@@ -167,6 +185,10 @@ export interface BatchAnalysis {
   crossModel: CrossModelAnalysis;
   statistics: StatisticalResults;
   anomalies?: AnomalyDetectionResult;
+  temporal?: import('./analysis/temporal').TemporalAnalysis;
+  pca?: import('./analysis/pca').PCAResult;
+  thinkingTraces?: import('./analysis/thinking-trace').ThinkingTraceAnalysis;
+  deepLogprobs?: import('./analysis/logprobs-deep').DeepLogprobsAnalysis;
 }
 
 export interface ModelAnalysis {

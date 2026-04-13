@@ -33,9 +33,14 @@ export async function GET(
         );
       
       case "csv":
-        const csvContent = type === "conversations"
-          ? await persistence.exportConversationsAsCSV(batchId)
-          : await persistence.exportBatchAsCSV(batchId);
+        let csvContent: string;
+        if (type === "conversations") {
+          csvContent = await persistence.exportConversationsAsCSV(batchId);
+        } else if (type === "research") {
+          csvContent = generateResearchCSV(batch);
+        } else {
+          csvContent = await persistence.exportBatchAsCSV(batchId);
+        }
         
         return new NextResponse(csvContent, {
           headers: {
@@ -66,6 +71,47 @@ export async function GET(
       { status: 500 }
     );
   }
+}
+
+function generateResearchCSV(batch: any): string {
+  const headers = [
+    'batchId', 'modelId', 'runIndex', 'turnNumber', 'role',
+    'content', 'complianceScore', 'sentiment', 'cooperationScore',
+    'confidence', 'firstTokenEntropy', 'responseLength', 'tokensUsed',
+    'scriptName', 'temperature', 'timestamp',
+  ];
+  
+  const rows: string[][] = [];
+  
+  for (const run of batch.runs || []) {
+    let turnNum = 0;
+    for (const msg of run.conversation || []) {
+      if (msg.role === 'model') turnNum++;
+      
+      const turnMetric = run.metrics?.perTurnMetrics?.[turnNum - 1];
+      
+      rows.push([
+        batch.batchId,
+        run.modelId,
+        String(run.runIndex),
+        String(turnNum),
+        msg.role,
+        `"${(msg.content || '').replace(/"/g, '""').slice(0, 2000)}"`,
+        String(run.compliance?.overallComplianceRate ?? ''),
+        turnMetric?.sentiment || '',
+        String(turnMetric?.cooperationScore ?? ''),
+        String(turnMetric?.confidence ?? ''),
+        String(turnMetric?.firstTokenEntropy ?? ''),
+        String(msg.content?.length || 0),
+        String(run.metrics?.tokensUsed || ''),
+        batch.config?.script?.name || '',
+        String(batch.config?.script?.config?.temperature ?? ''),
+        msg.timestamp || '',
+      ]);
+    }
+  }
+  
+  return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
 }
 
 function generateHTMLReport(batch: any): string {

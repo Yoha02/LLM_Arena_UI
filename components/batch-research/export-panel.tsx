@@ -19,6 +19,7 @@ import {
   Printer,
 } from "lucide-react";
 import { BatchResearchPDFGenerator } from "@/lib/starchamber/batch/pdf-generator";
+import { generateFullLatexReport } from "@/lib/starchamber/batch/export/latex";
 import type { BatchResult } from "@/lib/starchamber/batch/types";
 
 interface ExportPanelProps {
@@ -27,7 +28,7 @@ interface ExportPanelProps {
   disabled?: boolean;
 }
 
-type ExportFormat = "json" | "csv-summary" | "csv-conversations" | "report" | "pdf";
+type ExportFormat = "json" | "csv-summary" | "csv-conversations" | "csv-research" | "report" | "pdf" | "latex";
 
 export function ExportPanel({ batchId, batch, disabled }: ExportPanelProps) {
   const [loading, setLoading] = useState<ExportFormat | null>(null);
@@ -57,6 +58,35 @@ export function ExportPanel({ batchId, batch, disabled }: ExportPanelProps) {
     }
   };
 
+  const handleLatexExport = async () => {
+    setLoading("latex");
+    try {
+      let batchData = batch;
+      if (!batchData) {
+        const response = await fetch(`/api/batch/${batchId}/status`);
+        if (!response.ok) throw new Error("Failed to fetch batch data");
+        batchData = await response.json();
+      }
+      if (!batchData) throw new Error("No batch data available");
+      
+      const latex = generateFullLatexReport(batchData);
+      const blob = new Blob([latex], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `batch-${batchId}-tables.tex`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("LaTeX export error:", error);
+      alert("Failed to generate LaTeX. Please try again.");
+    } finally {
+      setLoading(null);
+    }
+  };
+
   const handleExport = async (format: ExportFormat) => {
     setLoading(format);
     
@@ -77,8 +107,15 @@ export function ExportPanel({ batchId, batch, disabled }: ExportPanelProps) {
           url = `/api/batch/${batchId}/export?format=csv&type=conversations`;
           filename = `batch-${batchId}-conversations.csv`;
           break;
+        case "csv-research":
+          url = `/api/batch/${batchId}/export?format=csv&type=research`;
+          filename = `batch-${batchId}-research-data.csv`;
+          break;
         case "report":
           window.open(`/api/batch/${batchId}/export?format=report`, "_blank");
+          setLoading(null);
+          return;
+        default:
           setLoading(null);
           return;
       }
@@ -134,7 +171,17 @@ export function ExportPanel({ batchId, batch, disabled }: ExportPanelProps) {
           CSV - Conversations
           <span className="ml-auto text-xs text-muted-foreground">All messages</span>
         </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleExport("csv-research")}>
+          <FileSpreadsheet className="w-4 h-4 mr-2" />
+          CSV - Research Data
+          <span className="ml-auto text-xs text-muted-foreground">Per-turn</span>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => handleLatexExport()}>
+          <FileText className="w-4 h-4 mr-2" />
+          LaTeX Tables
+          <span className="ml-auto text-xs text-muted-foreground">.tex</span>
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={() => handleExport("report")}>
           <FileText className="w-4 h-4 mr-2" />
           View Report

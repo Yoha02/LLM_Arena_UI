@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getBuiltInScript, parseBatchConfig } from "@/lib/starchamber/batch/script-parser";
 import { initBatchRunner, hasBatchRunner, getBatchRunner, resetBatchRunner } from "@/lib/starchamber/batch/batch-runner";
 import { getBatchPersistence } from "@/lib/starchamber/batch/persistence";
-import { analyzeBatchResults } from "@/lib/starchamber/batch/analysis";
+import { analyzeBatchResults, initLLMJudge } from "@/lib/starchamber/batch/analysis";
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,6 +32,10 @@ export async function POST(request: NextRequest) {
         { error: "OPENROUTER_API_KEY not configured" },
         { status: 500 }
       );
+    }
+    
+    if (openrouterApiKey) {
+      initLLMJudge(openrouterApiKey);
     }
     
     const batchConfig = parseBatchConfig({
