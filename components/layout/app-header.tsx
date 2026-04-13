@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Swords, User } from "lucide-react";
+import { Swords, User, FlaskConical } from "lucide-react";
 
 // ============ Tab Configuration ============
 
@@ -22,6 +22,13 @@ const EXPERIMENT_TABS = [
     icon: User,
     description: "Direct Interrogation",
   },
+  {
+    id: "batch-research",
+    label: "Batch Research",
+    href: "/batch-research",
+    icon: FlaskConical,
+    description: "Automated Studies",
+  },
 ] as const;
 
 // ============ Props ============
@@ -30,17 +37,41 @@ interface AppHeaderProps {
   isConnected?: boolean;
   experimentId?: string | null;
   experimentType?: "arena" | "starchamber" | null;
+  batchStatus?: "idle" | "running" | "completed";
 }
 
 // ============ Component ============
 
 export function AppHeader({ 
-  isConnected = false, 
+  isConnected = false,
+  batchStatus,
 }: AppHeaderProps) {
   const pathname = usePathname();
 
   // Determine active tab from pathname
   const activeTab = EXPERIMENT_TABS.find((tab) => pathname.startsWith(tab.href))?.id || "arena";
+  
+  // Check if we're on the batch research page
+  const isBatchResearchPage = pathname.startsWith("/batch-research");
+  
+  // Determine status indicator based on page type
+  const getStatusIndicator = () => {
+    if (isBatchResearchPage) {
+      if (batchStatus === "running") {
+        return { color: "bg-blue-500 animate-pulse", text: "Running", textColor: "text-blue-600" };
+      }
+      if (batchStatus === "completed") {
+        return { color: "bg-green-500", text: "Completed", textColor: "text-green-600" };
+      }
+      return { color: "bg-gray-400", text: "Idle", textColor: "text-muted-foreground" };
+    }
+    // Default WebSocket status for other pages
+    return isConnected 
+      ? { color: "bg-green-500", text: "Connected", textColor: "text-muted-foreground" }
+      : { color: "bg-red-500", text: "Disconnected", textColor: "text-red-500" };
+  };
+  
+  const status = getStatusIndicator();
 
   return (
     <header className="sticky top-0 z-50 bg-background border-b">
@@ -57,19 +88,11 @@ export function AppHeader({
             <p className="text-xs text-muted-foreground">AI Behavioral Research Platform</p>
           </div>
           
-          {/* Connection Status - Subtle indicator */}
+          {/* Connection/Status indicator */}
           <div className="flex items-center gap-2">
-            <div 
-              className={cn(
-                "w-2 h-2 rounded-full",
-                isConnected ? "bg-green-500" : "bg-red-500"
-              )}
-            />
-            <span className={cn(
-              "text-sm",
-              isConnected ? "text-muted-foreground" : "text-red-500"
-            )}>
-              {isConnected ? "Connected" : "Disconnected"}
+            <div className={cn("w-2 h-2 rounded-full", status.color)} />
+            <span className={cn("text-sm", status.textColor)}>
+              {status.text}
             </span>
           </div>
         </div>

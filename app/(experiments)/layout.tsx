@@ -18,6 +18,7 @@ export default function ExperimentsLayout({ children }: ExperimentsLayoutProps) 
   const [isConnected, setIsConnected] = useState(false);
   const [experimentId, setExperimentId] = useState<string | null>(null);
   const [experimentType, setExperimentType] = useState<"arena" | "starchamber" | null>(null);
+  const [batchStatus, setBatchStatus] = useState<"idle" | "running" | "completed">("idle");
 
   // Listen for connection status changes from child components
   useEffect(() => {
@@ -29,13 +30,19 @@ export default function ExperimentsLayout({ children }: ExperimentsLayoutProps) 
       setExperimentId(event.detail.experimentId);
       setExperimentType(event.detail.experimentType);
     };
+    
+    const handleBatchStatusChange = (event: CustomEvent) => {
+      setBatchStatus(event.detail.status);
+    };
 
     window.addEventListener("ws-connection-change" as any, handleConnectionChange);
     window.addEventListener("experiment-change" as any, handleExperimentChange);
+    window.addEventListener("batch-status-change" as any, handleBatchStatusChange);
 
     return () => {
       window.removeEventListener("ws-connection-change" as any, handleConnectionChange);
       window.removeEventListener("experiment-change" as any, handleExperimentChange);
+      window.removeEventListener("batch-status-change" as any, handleBatchStatusChange);
     };
   }, []);
 
@@ -45,6 +52,7 @@ export default function ExperimentsLayout({ children }: ExperimentsLayoutProps) 
         isConnected={isConnected}
         experimentId={experimentId}
         experimentType={experimentType}
+        batchStatus={batchStatus}
       />
       <main className="container mx-auto px-4 py-6">
         {children}
@@ -75,6 +83,16 @@ export function notifyExperimentChange(
     window.dispatchEvent(
       new CustomEvent("experiment-change", {
         detail: { experimentId, experimentType },
+      })
+    );
+  }
+}
+
+export function notifyBatchStatusChange(status: "idle" | "running" | "completed") {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("batch-status-change", {
+        detail: { status },
       })
     );
   }
